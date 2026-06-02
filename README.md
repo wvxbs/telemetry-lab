@@ -1,57 +1,57 @@
 # Telemetry Lab
 
-Want a dashboard with the real telemetry of your PC? Run an HWiNFO64 CSV log, drop it into Telemetry Lab, and get a readable view of temperatures, power, clocks, loads, memory, storage, and other sensors without building spreadsheets by hand.
+Want a clean, interactive dashboard with the real telemetry of your PC? Run an HWiNFO64 CSV log, open it in Telemetry Lab, and turn raw sensor data into a clear story about temperatures, power, clocks, load, memory, storage, and system behavior.
 
-Telemetry Lab is made for people who test hardware, tune performance, compare machines, run benchmarks, or just want to understand what their PC is doing during a game, render, compile, export, or stress test.
+Telemetry Lab helps you understand what happened during a benchmark, a gaming session, a render, an export, a compile, or any demanding workload. It is built for people who want answers, not screenshots scattered across folders and giant CSV files nobody wants to read by hand.
 
 ## Pitch
 
-Telemetry Lab turns raw HWiNFO64 CSV logs into an interactive performance dashboard.
+Telemetry Lab turns HWiNFO64 logs into a practical performance dashboard for your machine.
 
-Use it to:
+With it, you can see how your PC behaves under pressure, compare different runs, keep benchmark scores organized, and connect each result to the telemetry captured during the test. That means you can stop guessing whether a game is CPU-bound, whether your GPU is power-limited, whether temperatures changed after a tweak, or whether a new configuration actually improved anything.
 
-- inspect how your PC behaves during games, benchmarks, and creative workloads;
-- understand CPU, GPU, memory, disk, temperature, power, and clock behavior in one place;
-- compare two telemetry reports side by side;
-- register benchmark scores that tools do not keep after execution;
-- link benchmark results to the telemetry log captured during the run;
-- create custom charts from any numeric sensor in the report;
-- keep benchmark history as portable JSON files saved through your browser.
+It is especially useful for:
 
-Instead of taking screenshots of scores and scrolling through giant CSV files, you can keep a clean record of what happened, where it happened, and how the machine behaved while it happened.
+- gaming performance checks, from quick sessions to repeatable test runs;
+- benchmark tracking, including tools that do not keep score history for you;
+- creative workloads, such as rendering, exporting, compiling, and editing;
+- before-and-after comparisons after driver, BIOS, cooling, power, or tuning changes;
+- building a personal performance history without relying on screenshots.
 
-## Apresentacao
+Instead of opening a CSV and hunting for meaning, you upload the report and get charts, summaries, comparisons, benchmark records, and custom visualizations in one place.
 
-Quer uma dashboard com as informacoes reais do seu PC? Rode um log CSV no HWiNFO64, abra no Telemetry Lab, e veja temperaturas, consumo, clocks, cargas, memoria, armazenamento e outros sensores de um jeito legivel, sem montar planilha na mao.
+## Apresentação
 
-O Telemetry Lab foi feito para quem testa hardware, ajusta desempenho, compara maquinas, roda benchmarks, ou simplesmente quer entender o que o PC esta fazendo durante um jogo, render, compilacao, exportacao ou teste de estresse.
+Quer uma dashboard bonita e direta com as informações reais do seu PC? Rode um relatório CSV no HWiNFO64, abra no Telemetry Lab e transforme dados brutos de sensores em uma visão clara sobre temperaturas, consumo, clocks, carga, memória, armazenamento e comportamento do sistema.
 
-Use para:
+O Telemetry Lab ajuda você a entender o que aconteceu durante um benchmark, uma partida, um render, uma exportação, uma compilação ou qualquer carga pesada. Ele foi feito para quem quer resposta, não uma pasta cheia de prints e arquivos CSV gigantes que ninguém tem paciência de ler na mão.
 
-- analisar o comportamento do PC em jogos, benchmarks e programas de criacao;
-- entender CPU, GPU, memoria, disco, temperatura, consumo e clocks em um so lugar;
-- comparar dois relatorios de telemetria lado a lado;
-- registrar scores de benchmarks que nao salvam resultado depois da execucao;
-- relacionar o resultado do benchmark ao log capturado durante o teste;
-- criar graficos customizados com qualquer sensor numerico do relatorio;
-- manter historico de benchmarks em arquivos JSON portateis salvos pelo navegador.
+Com ele, você consegue ver como o PC se comporta sob pressão, comparar execuções diferentes, organizar scores de benchmarks e relacionar cada resultado ao log de telemetria capturado durante o teste. Isso ajuda a responder perguntas como: o jogo está limitado por CPU? A GPU bateu limite de energia? A temperatura mudou depois de um ajuste? A nova configuração realmente melhorou alguma coisa?
 
-Em vez de tirar print de score e se perder em CSV gigante, voce guarda um registro claro do que foi testado, qual foi o resultado, e como a maquina se comportou durante o teste.
+Ele é especialmente útil para:
+
+- analisar desempenho em jogos, de sessões rápidas a testes repetíveis;
+- acompanhar benchmarks, inclusive ferramentas que não guardam histórico de scores;
+- avaliar programas de criação, renderização, exportação, compilação e edição;
+- comparar antes e depois de drivers, BIOS, refrigeração, energia ou ajustes finos;
+- criar um histórico pessoal de desempenho sem depender de screenshots.
+
+Em vez de abrir um CSV e procurar significado no caos, você sobe o relatório e tem gráficos, resumos, comparações, registros de benchmark e visualizações customizadas em um só lugar.
 
 ## Features
 
-- Opens HWiNFO CSV files from browser upload.
-- Also accepts a typed path when that path is accessible to the app process, such as local execution paths or Docker bind mounts.
-- Infers report context from file and folder names, such as `benchmarks/games/valorant/report.csv`.
-- Falls back to a general report context when the path does not carry useful metadata.
-- Keeps rich known metrics for the original Cinebench 2026 logs while also exposing generic numeric sensors from any HWiNFO CSV.
-- Registers benchmark scores with arbitrary benchmark names, metric names, values, and units.
-- Saves benchmark records through the browser, not inside the container.
-- Reads benchmark JSON records back through browser upload.
-- Links a benchmark record to the currently loaded telemetry report.
-- Compares two telemetry CSV reports.
-- Provides standard charts plus a custom chart generator with line, area, scatter, bar, heatmap, and table modes.
-- Offers opt-in live reload for CSV files that are still being written when using a typed path accessible to the app.
+- Open HWiNFO64 CSV reports directly from the browser.
+- Use typed paths when the app can access them, such as local paths or Docker bind mounts.
+- Infer context from file and folder names, such as `benchmarks/games/valorant/report.csv`.
+- Keep working even when the path has no useful context, using a general report fallback.
+- Preserve rich views for known Cinebench 2026 logs while still exposing generic numeric sensors from any HWiNFO CSV.
+- Register benchmark results with custom benchmark names, score names, values, and units.
+- Save benchmark records through the browser, not inside the container.
+- Load saved benchmark JSON files back into the app.
+- Link benchmark records to the telemetry report captured during the same run.
+- Compare two telemetry reports side by side.
+- Build custom charts with line, area, scatter, bar, heatmap, and table modes.
+- Enable live reload for CSV files that are still being written, when using a typed path accessible to the app.
 
 The app is in Portuguese by default and includes an English switch in the sidebar.
 
@@ -84,10 +84,10 @@ docker compose up -d --build
 
 Open the dashboard at <http://localhost:8501>.
 
-The Compose file mounts this read-only folder so typed paths can still be useful:
+If you want typed paths inside Docker, mount a read-only reports folder like this:
 
 ```text
-/mnt/c/Users/gabri/OneDrive/Documents/tools -> /data/reports (read-only)
+/path/to/your/hwinfo-reports -> /data/reports (read-only)
 ```
 
 No write volume is required for benchmark records because saving is browser-managed.
@@ -101,16 +101,15 @@ docker run -d \
   --name telemetry-lab \
   --restart unless-stopped \
   -p 8501:8501 \
-  -v "/mnt/c/Users/gabri/OneDrive/Documents/tools:/data/reports:ro" \
+  -v "/path/to/your/hwinfo-reports:/data/reports:ro" \
   wvxbs/telemetry-lab:latest
 ```
 
-If you do not need typed paths inside Docker, you can omit the `-v` mount and use only browser uploads.
+Replace `/path/to/your/hwinfo-reports` with the folder that contains your HWiNFO64 CSV files. If you do not need typed paths inside Docker, omit the `-v` mount and use only browser uploads.
 
 ## Local Development
 
 ```bash
-cd /home/wvxbs/Documentos/tools/telemetry-lab
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
