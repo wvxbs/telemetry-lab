@@ -491,7 +491,7 @@ def render_chart(report: Report, chart_type: str, x_axis: str, y_axis: list[str]
     if x_axis != "time" and x_axis in report.numeric.columns:
         data[x_axis] = report.numeric[x_axis]
     if chart_type == "Tabela":
-        st.dataframe(data, use_container_width=True)
+        st.dataframe(data, width="stretch")
         return
     if chart_type == "Heatmap":
         corr = report.numeric[y_axis].corr(numeric_only=True).reset_index().melt("index")
@@ -506,7 +506,7 @@ def render_chart(report: Report, chart_type: str, x_axis: str, y_axis: list[str]
             )
             .properties(height=height)
         )
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(chart, width="stretch")
         return
     long = data.melt(id_vars=[x_axis], value_vars=y_axis, var_name="Metric", value_name="Value").dropna()
     base = alt.Chart(long).encode(
@@ -523,7 +523,7 @@ def render_chart(report: Report, chart_type: str, x_axis: str, y_axis: list[str]
         chart = base.mark_bar(opacity=0.75)
     else:
         chart = base.mark_line()
-    st.altair_chart(chart.properties(height=height).interactive(), use_container_width=True)
+    st.altair_chart(chart.properties(height=height).interactive(), width="stretch")
 
 
 def render_report(report: Report) -> None:
@@ -559,7 +559,7 @@ def render_report(report: Report) -> None:
         ]
         if preferred:
             key_stats = stats[stats["Metric"].isin(preferred)]
-            st.dataframe(key_stats, use_container_width=True, hide_index=True)
+            st.dataframe(key_stats, width="stretch", hide_index=True)
             render_chart(report, "Linha", "time", preferred[:6], 360)
         limiter_rows = [
             ("GPU perf limiter", yes_count(report.df, INDEX["gpu_perf_limiter"])),
@@ -571,12 +571,12 @@ def render_report(report: Report) -> None:
         limiter_df = pd.DataFrame(limiter_rows, columns=["Evento", "Amostras"])
         limiter_df = limiter_df[limiter_df["Amostras"] > 0]
         if not limiter_df.empty:
-            st.dataframe(limiter_df, use_container_width=True, hide_index=True)
+            st.dataframe(limiter_df, width="stretch", hide_index=True)
     with tab_stats:
         categories = sorted({category_for_metric(col) for col in report.numeric.columns})
         chosen_category = st.selectbox(tr("category"), ["Todos"] + categories)
         visible = stats if chosen_category == "Todos" else stats[stats["Metric"].map(category_for_metric) == chosen_category]
-        st.dataframe(visible, use_container_width=True, hide_index=True)
+        st.dataframe(visible, width="stretch", hide_index=True)
         st.download_button(
             tr("download"),
             stats.to_csv(index=False).encode("utf-8"),
@@ -598,7 +598,7 @@ def render_report(report: Report) -> None:
         chart_type = st.selectbox(tr("chart_type"), ["Linha", "Área", "Dispersão", "Barras", "Heatmap", "Tabela"])
         render_chart(report, chart_type, "time", cols)
     with tab_raw:
-        st.dataframe(report.df, use_container_width=True)
+        st.dataframe(report.df, width="stretch")
         st.download_button(
             tr("download"),
             report.df.to_csv(index=False).encode("utf-8"),
@@ -674,11 +674,11 @@ def render_benchmarks() -> None:
     st.subheader(tr("benchmarks"))
     default_scores = pd.DataFrame(
         [
-            {"Metric": "GPU", "Value": 18089, "Unit": "pts"},
-            {"Metric": "CPU multi", "Value": 3727, "Unit": "pts"},
-            {"Metric": "CPU single core", "Value": 563, "Unit": "pts"},
-            {"Metric": "CPU single thread", "Value": 420, "Unit": "pts"},
-            {"Metric": "MP ratio", "Value": 8.86, "Unit": "x"},
+            {"Metric": "GPU", "Value": "18089", "Unit": "pts"},
+            {"Metric": "CPU multi", "Value": "3727", "Unit": "pts"},
+            {"Metric": "CPU single core", "Value": "563", "Unit": "pts"},
+            {"Metric": "CPU single thread", "Value": "420", "Unit": "pts"},
+            {"Metric": "MP ratio", "Value": "8,86", "Unit": "x"},
         ]
     )
     with st.form("benchmark_form"):
@@ -687,7 +687,7 @@ def render_benchmarks() -> None:
         scores = st.data_editor(
             default_scores,
             num_rows="dynamic",
-            use_container_width=True,
+            width="stretch",
             column_config={"Metric": st.column_config.TextColumn(required=True), "Value": st.column_config.TextColumn()},
         )
         use_current = st.checkbox(tr("current_report"), value=bool(st.session_state.get("current_report_source")))
@@ -723,7 +723,7 @@ def render_benchmarks() -> None:
                     st.json(data)
                     scores_df = pd.DataFrame(data.get("scores", []))
                     if not scores_df.empty:
-                        st.dataframe(scores_df, use_container_width=True, hide_index=True)
+                        st.dataframe(scores_df, width="stretch", hide_index=True)
                     linked_report = data.get("linked_report")
                     if linked_report:
                         st.caption(f"{tr('linked_report')}: {linked_report.get('source', '')}")
@@ -760,14 +760,14 @@ def render_compare() -> None:
                 }
             )
     comp = pd.DataFrame(rows)
-    st.dataframe(comp, use_container_width=True, hide_index=True)
+    st.dataframe(comp, width="stretch", hide_index=True)
     chart = (
         alt.Chart(comp)
         .mark_bar()
         .encode(x="Metric:N", y="Avg:Q", color="Report:N", column="Context:N", tooltip=list(comp.columns))
         .properties(height=320)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
 
 
 def render_custom_chart(report: Report | None) -> None:
