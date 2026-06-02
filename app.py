@@ -9,7 +9,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
-from io import BytesIO, StringIO
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
@@ -236,28 +236,55 @@ def decode_csv_bytes(data: bytes) -> tuple[list[str], str]:
     raise RuntimeError(f"Could not read CSV with known encodings: {last_error}")
 
 
+def parse_hwinfo_csv_bytes(data: bytes) -> pd.DataFrame:
+    columns, encoding = decode_csv_bytes(data[:262_144])
+    text = data.decode(encoding, errors="replace")
+    reader = csv.reader(StringIO(text))
+    next(reader, None)
+    width = len(columns)
+    rows: list[list[str]] = []
+    repaired_short = 0
+    repaired_long = 0
+    repaired_lines: list[int] = []
+    for line_number, row in enumerate(reader, start=2):
+        if not row:
+            continue
+        if len(row) < width:
+            repaired_short += 1
+            repaired_lines.append(line_number)
+            row = row + [""] * (width - len(row))
+        elif len(row) > width:
+            repaired_long += 1
+            repaired_lines.append(line_number)
+            row = row[: width - 1] + [",".join(row[width - 1 :])]
+        rows.append(row)
+    df = pd.DataFrame(rows, columns=columns)
+    df.attrs["csv_repaired_short_rows"] = repaired_short
+    df.attrs["csv_repaired_long_rows"] = repaired_long
+    df.attrs["csv_repaired_lines"] = repaired_lines[:10]
+    df.attrs["csv_encoding"] = encoding
+    return df
+
+
 @st.cache_data(show_spinner=False)
 def load_csv_path_cached(path: str, mtime_ns: int, size: int) -> pd.DataFrame:
     del mtime_ns, size
-    data = Path(path).read_bytes()
-    columns, encoding = decode_csv_bytes(data[:262_144])
-    return pd.read_csv(path, names=columns, skiprows=1, encoding=encoding)
+    return parse_hwinfo_csv_bytes(Path(path).read_bytes())
 
 
 def load_csv_path(path: str, live_reload: bool) -> tuple[pd.DataFrame, int, int]:
     p = Path(path).expanduser()
     stat = p.stat()
     if live_reload:
-        columns, encoding = decode_csv_bytes(p.read_bytes()[:262_144])
-        df = pd.read_csv(p, names=columns, skiprows=1, encoding=encoding)
+        df = parse_hwinfo_csv_bytes(p.read_bytes())
     else:
         df = load_csv_path_cached(str(p), stat.st_mtime_ns, stat.st_size)
     return df, stat.st_mtime_ns, stat.st_size
 
 
 def load_uploaded_csv(name: str, data: bytes) -> pd.DataFrame:
-    columns, encoding = decode_csv_bytes(data[:262_144])
-    return pd.read_csv(BytesIO(data), names=columns, skiprows=1, encoding=encoding)
+    del name
+    return parse_hwinfo_csv_bytes(data)
 
 
 def numeric_series(series: pd.Series) -> pd.Series:
@@ -534,6 +561,13 @@ def render_report(report: Report) -> None:
     ctx = report.context
     st.subheader(ctx["title"])
     st.caption(f"{report.source}")
+    repaired = int(report.df.attrs.get("csv_repaired_short_rows", 0)) + int(report.df.attrs.get("csv_repaired_long_rows", 0))
+    if repaired:
+        lines = report.df.attrs.get("csv_repaired_lines", [])
+        st.warning(
+            f"O CSV tinha {repaired} linha(s) com quantidade de campos diferente do cabeçalho. "
+            f"Normalizei essas linhas para manter o relatório carregável. Exemplos: {lines}"
+        )
     metric_row(
         [
             (tr("samples"), len(report.df), None),
