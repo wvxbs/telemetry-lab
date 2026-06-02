@@ -9,6 +9,8 @@ import pandas as pd
 import streamlit as st
 
 
+CONTAINER_DEFAULT_DIR = Path("/data/cinebench-2026")
+
 DEFAULT_DIR = Path(
     "/mnt/c/Users/gabri/OneDrive/Documents/tools/Desmerdificar o windows/"
     "relatorio de sensores/cinebench 2026"
@@ -203,7 +205,10 @@ def main() -> None:
     st.title("Cinebench 2026 + HWiNFO")
     st.caption("Resumo de potencia, temperatura, clocks e dispositivos.")
 
-    default_dir = ALT_DEFAULT_DIR if ALT_DEFAULT_DIR.exists() else DEFAULT_DIR
+    if CONTAINER_DEFAULT_DIR.exists():
+        default_dir = CONTAINER_DEFAULT_DIR
+    else:
+        default_dir = ALT_DEFAULT_DIR if ALT_DEFAULT_DIR.exists() else DEFAULT_DIR
     with st.sidebar:
         st.header("Entrada")
         csv_dir = Path(st.text_input("Pasta dos CSVs", str(default_dir)))
