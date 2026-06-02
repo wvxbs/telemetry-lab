@@ -7,5 +7,6 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - /mnt/c/Users/gabri/OneDrive/Documents/tools/Desmerdíficar o windows/relatório de sensores/cinebench 2026:/data/cinebench-2026:ro
+      - /mnt/c/Users/gabri/OneDrive/Documents/tools:/data/reports:ro
+      - /mnt/c/Users/gabri/OneDrive/Documents/tools/telemetry-lab-data/benchmarks:/data/benchmarks:rw
     restart: unless-stopped
