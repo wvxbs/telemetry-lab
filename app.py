@@ -19,7 +19,6 @@ import streamlit.components.v1 as components
 
 APP_VERSION = "0.2.0"
 CONTAINER_REPORT_DIR = Path("/data/reports")
-CONTAINER_BENCHMARK_DIR = Path("/data/benchmarks")
 
 DEFAULT_DIR = Path(
     "/mnt/c/Users/gabri/OneDrive/Documents/tools/Desmerdificar o windows/"
@@ -93,7 +92,7 @@ TEXT = {
         "benchmarks": "Benchmarks",
         "custom_chart": "Gráfico customizado",
         "input": "Entrada",
-        "csv_path": "Caminho do CSV no servidor/container",
+        "csv_path": "Caminho do CSV acessível ao app",
         "upload_csv": "Ou envie um CSV pelo navegador",
         "live_reload": "Ler dinamicamente arquivo ainda em gravação",
         "refresh_seconds": "Atualizar a cada N segundos",
@@ -107,7 +106,7 @@ TEXT = {
         "raw": "Dados brutos",
         "save": "Salvar",
         "download": "Baixar arquivo",
-        "server_save_dir": "Pasta para salvar no servidor/container",
+        "browser_save": "Salvar em uma pasta pelo Chrome",
         "benchmark_name": "Nome do benchmark",
         "scenario": "Cenário/contexto",
         "scores": "Scores",
@@ -120,7 +119,7 @@ TEXT = {
         "metric_picker": "Métricas",
         "no_report": "Informe um CSV por caminho ou upload.",
         "saved": "Arquivo salvo.",
-        "cannot_save": "Essa pasta não existe ou não está acessível pelo processo.",
+        "browser_save_help": "No Chrome/Edge, escolha uma pasta local e o navegador grava o arquivo sem passar pelo container.",
         "loaded_files": "Arquivos registrados",
     },
     "en": {
@@ -132,7 +131,7 @@ TEXT = {
         "benchmarks": "Benchmarks",
         "custom_chart": "Custom chart",
         "input": "Input",
-        "csv_path": "CSV path on server/container",
+        "csv_path": "CSV path accessible to the app",
         "upload_csv": "Or upload a CSV through the browser",
         "live_reload": "Dynamically read a CSV that is still being written",
         "refresh_seconds": "Refresh every N seconds",
@@ -146,7 +145,7 @@ TEXT = {
         "raw": "Raw data",
         "save": "Save",
         "download": "Download file",
-        "server_save_dir": "Save folder on server/container",
+        "browser_save": "Save to a folder through Chrome",
         "benchmark_name": "Benchmark name",
         "scenario": "Scenario/context",
         "scores": "Scores",
@@ -159,7 +158,7 @@ TEXT = {
         "metric_picker": "Metrics",
         "no_report": "Provide a CSV path or upload.",
         "saved": "File saved.",
-        "cannot_save": "This folder does not exist or is not accessible to the process.",
+        "browser_save_help": "In Chrome/Edge, choose a local folder and the browser writes the file without using the container filesystem.",
         "loaded_files": "Registered files",
     },
 }
@@ -627,6 +626,49 @@ def benchmark_payload(name: str, scenario: str, scores: pd.DataFrame, report: di
         "linked_report": report,
     }
 
+def render_browser_save_button(file_name: str, content: str, label: str, help_text: str) -> None:
+    payload = json.dumps({"fileName": file_name, "content": content, "label": label, "help": help_text})
+    components.html(
+        f"""
+        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+          <button id="save-file" style="
+            border: 1px solid rgba(49, 51, 63, 0.2);
+            border-radius: 0.5rem;
+            padding: 0.45rem 0.8rem;
+            background: rgb(255, 255, 255);
+            color: rgb(49, 51, 63);
+            cursor: pointer;
+            font-size: 0.92rem;
+          "></button>
+          <div id="save-status" style="margin-top: 0.35rem; color: #6b7280; font-size: 0.82rem;"></div>
+        </div>
+        <script>
+          const data = {payload};
+          const button = document.getElementById("save-file");
+          const status = document.getElementById("save-status");
+          button.textContent = data.label;
+          status.textContent = data.help;
+          button.addEventListener("click", async () => {{
+            try {{
+              if (!window.showDirectoryPicker) {{
+                status.textContent = "File System Access API unavailable here. Use the download button.";
+                return;
+              }}
+              const dir = await window.showDirectoryPicker({{ mode: "readwrite" }});
+              const handle = await dir.getFileHandle(data.fileName, {{ create: true }});
+              const writable = await handle.createWritable();
+              await writable.write(data.content);
+              await writable.close();
+              status.textContent = `Saved: ${{data.fileName}}`;
+            }} catch (error) {{
+              status.textContent = error && error.name === "AbortError" ? "Canceled." : `Could not save: ${{error.message || error}}`;
+            }}
+          }});
+        </script>
+        """,
+        height=92,
+    )
+
 
 def render_benchmarks() -> None:
     st.subheader(tr("benchmarks"))
@@ -649,42 +691,44 @@ def render_benchmarks() -> None:
             column_config={"Metric": st.column_config.TextColumn(required=True), "Value": st.column_config.TextColumn()},
         )
         use_current = st.checkbox(tr("current_report"), value=bool(st.session_state.get("current_report_source")))
-        save_dir = st.text_input(tr("server_save_dir"), value=str(CONTAINER_BENCHMARK_DIR if CONTAINER_BENCHMARK_DIR.exists() else Path.cwd()))
         submitted = st.form_submit_button(tr("save"))
     linked = None
     if use_current and st.session_state.get("current_report_source"):
         linked = {"source": st.session_state["current_report_source"], "context": st.session_state.get("current_report_context", {})}
     payload = benchmark_payload(name, scenario, scores, linked)
-    encoded = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    content = json.dumps(payload, ensure_ascii=False, indent=2)
+    encoded = content.encode("utf-8")
     file_name = f"{slugify(payload['benchmark'])}-{slugify(payload['scenario'])}-{datetime.now():%Y%m%d-%H%M%S}.telemetry-benchmark.json"
     if submitted:
-        target = Path(save_dir).expanduser()
-        if target.exists() and target.is_dir():
-            out = target / file_name
-            out.write_bytes(encoded)
-            st.success(f"{tr('saved')} {out}")
-        else:
-            st.warning(tr("cannot_save"))
-    st.download_button(tr("download"), encoded, file_name=file_name, mime="application/json")
+        st.success("Registro pronto. Salve pelo navegador abaixo.")
+    left, right = st.columns([1, 1])
+    with left:
+        st.download_button(tr("download"), encoded, file_name=file_name, mime="application/json")
+    with right:
+        render_browser_save_button(file_name, content, tr("browser_save"), tr("browser_save_help"))
 
     st.divider()
     st.subheader(tr("loaded_files"))
-    read_dir = st.text_input("Pasta com JSONs", value=save_dir, key="read_bench_dir")
-    files = []
-    p = Path(read_dir).expanduser()
-    if p.exists() and p.is_dir():
-        files = sorted(p.glob("*.telemetry-benchmark.json")) + sorted(p.glob("*.json"))
-    if files:
-        chosen = st.selectbox("Arquivo", files, format_func=lambda item: item.name)
-        try:
-            data = json.loads(chosen.read_text(encoding="utf-8"))
-            st.json(data)
-            scores_df = pd.DataFrame(data.get("scores", []))
-            if not scores_df.empty:
-                st.dataframe(scores_df, use_container_width=True, hide_index=True)
-        except Exception as exc:
-            st.error(str(exc))
-
+    uploaded = st.file_uploader(
+        "JSON",
+        type=["json"],
+        accept_multiple_files=True,
+        key="benchmark_json_upload",
+    )
+    if uploaded:
+        for file in uploaded:
+            try:
+                data = json.loads(file.getvalue().decode("utf-8"))
+                with st.expander(file.name, expanded=len(uploaded) == 1):
+                    st.json(data)
+                    scores_df = pd.DataFrame(data.get("scores", []))
+                    if not scores_df.empty:
+                        st.dataframe(scores_df, use_container_width=True, hide_index=True)
+                    linked_report = data.get("linked_report")
+                    if linked_report:
+                        st.caption(f"{tr('linked_report')}: {linked_report.get('source', '')}")
+            except Exception as exc:
+                st.error(f"{file.name}: {exc}")
 
 def render_compare() -> None:
     left, right = st.columns(2)
