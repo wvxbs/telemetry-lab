@@ -1,10 +1,44 @@
 # Telemetry Lab
 
-Streamlit dashboard for HWiNFO CSV logs, benchmark score records, report comparison, and custom charts.
+Want a dashboard with the real telemetry of your PC? Run an HWiNFO64 CSV log, drop it into Telemetry Lab, and get a readable view of temperatures, power, clocks, loads, memory, storage, and other sensors without building spreadsheets by hand.
 
-The app is in Portuguese by default and includes an English switch in the sidebar.
+Telemetry Lab is made for people who test hardware, tune performance, compare machines, run benchmarks, or just want to understand what their PC is doing during a game, render, compile, export, or stress test.
 
-## What It Does
+## Pitch
+
+Telemetry Lab turns raw HWiNFO64 CSV logs into an interactive performance dashboard.
+
+Use it to:
+
+- inspect how your PC behaves during games, benchmarks, and creative workloads;
+- understand CPU, GPU, memory, disk, temperature, power, and clock behavior in one place;
+- compare two telemetry reports side by side;
+- register benchmark scores that tools do not keep after execution;
+- link benchmark results to the telemetry log captured during the run;
+- create custom charts from any numeric sensor in the report;
+- keep benchmark history as portable JSON files saved through your browser.
+
+Instead of taking screenshots of scores and scrolling through giant CSV files, you can keep a clean record of what happened, where it happened, and how the machine behaved while it happened.
+
+## Apresentacao
+
+Quer uma dashboard com as informacoes reais do seu PC? Rode um log CSV no HWiNFO64, abra no Telemetry Lab, e veja temperaturas, consumo, clocks, cargas, memoria, armazenamento e outros sensores de um jeito legivel, sem montar planilha na mao.
+
+O Telemetry Lab foi feito para quem testa hardware, ajusta desempenho, compara maquinas, roda benchmarks, ou simplesmente quer entender o que o PC esta fazendo durante um jogo, render, compilacao, exportacao ou teste de estresse.
+
+Use para:
+
+- analisar o comportamento do PC em jogos, benchmarks e programas de criacao;
+- entender CPU, GPU, memoria, disco, temperatura, consumo e clocks em um so lugar;
+- comparar dois relatorios de telemetria lado a lado;
+- registrar scores de benchmarks que nao salvam resultado depois da execucao;
+- relacionar o resultado do benchmark ao log capturado durante o teste;
+- criar graficos customizados com qualquer sensor numerico do relatorio;
+- manter historico de benchmarks em arquivos JSON portateis salvos pelo navegador.
+
+Em vez de tirar print de score e se perder em CSV gigante, voce guarda um registro claro do que foi testado, qual foi o resultado, e como a maquina se comportou durante o teste.
+
+## Features
 
 - Opens HWiNFO CSV files from browser upload.
 - Also accepts a typed path when that path is accessible to the app process, such as local execution paths or Docker bind mounts.
@@ -18,6 +52,8 @@ The app is in Portuguese by default and includes an English switch in the sideba
 - Compares two telemetry CSV reports.
 - Provides standard charts plus a custom chart generator with line, area, scatter, bar, heatmap, and table modes.
 - Offers opt-in live reload for CSV files that are still being written when using a typed path accessible to the app.
+
+The app is in Portuguese by default and includes an English switch in the sidebar.
 
 ## Docker File Model
 
@@ -106,4 +142,3 @@ Copyright (C) 2026 Gabriel Ferreira.
 - Email: gabriel.ferreira7854@gmail.com
 - LinkedIn: https://www.linkedin.com/in/gabriel-ferreira-021a44140/
 - GitHub: https://github.com/wvxbs
-
