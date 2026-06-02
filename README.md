@@ -93,3 +93,17 @@ Benchmark records are saved as `*.telemetry-benchmark.json` files. Each file sto
 - optional link to the loaded HWiNFO CSV report and its inferred context.
 
 Use the Benchmarks tab to create, download, save through Chrome/Edge's directory picker, upload, read, and inspect those records.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 or later (GPL-3.0-or-later). See [LICENSE](LICENSE) for details.
+
+Copyright (C) 2026 Gabriel Ferreira.
+
+## Author And Contact
+
+- Author: Gabriel Ferreira
+- Email: gabriel.ferreira7854@gmail.com
+- LinkedIn: https://www.linkedin.com/in/gabriel-ferreira-021a44140/
+- GitHub: https://github.com/wvxbs
+
