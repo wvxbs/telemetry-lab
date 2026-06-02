@@ -37,14 +37,12 @@ The typed path input still exists, but it only works for paths the app process c
 Build the image using the project naming convention:
 
 ```bash
-cd /home/wvxbs/Documentos/tools/telemetry-lab
 docker build -t wvxbs/telemetry-lab:latest .
 ```
 
 Run detached with Docker Compose:
 
 ```bash
-cd /home/wvxbs/Documentos/tools/telemetry-lab
 docker compose up -d --build
 ```
 
