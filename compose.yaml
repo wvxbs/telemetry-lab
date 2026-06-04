@@ -6,6 +6,4 @@ services:
     container_name: telemetry-lab
     ports:
       - "8501:8501"
-    volumes:
-      - /mnt/c/Users/gabri/OneDrive/Documents/tools:/data/reports:ro
     restart: unless-stopped
