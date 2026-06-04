@@ -29,8 +29,13 @@ def pretty_token(value: str) -> str:
     return value.title() if value else value
 
 
+def ascii_fold(value: str) -> str:
+    value = repair_mojibake(value)
+    return unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii").lower()
+
+
 def category_for_metric(name: str) -> str:
-    low = name.lower()
+    low = ascii_fold(name)
     if "gpu" in low:
         return "GPU"
     if "cpu" in low or "core" in low:
