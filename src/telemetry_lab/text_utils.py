@@ -6,13 +6,25 @@ import re
 import unicodedata
 
 
+def repair_mojibake(value: str) -> str:
+    if not any(marker in value for marker in ("Ã", "Â", "\ufffd")):
+        return value
+    try:
+        repaired = value.encode("cp1252", errors="strict").decode("utf-8", errors="strict")
+    except UnicodeError:
+        return value
+    return repaired if repaired != value else value
+
+
 def slugify(value: str) -> str:
+    value = repair_mojibake(value)
     text = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
     text = re.sub(r"[^a-zA-Z0-9]+", "-", text.lower()).strip("-")
     return text or "telemetry"
 
 
 def pretty_token(value: str) -> str:
+    value = repair_mojibake(value)
     value = re.sub(r"[_-]+", " ", value).strip()
     return value.title() if value else value
 

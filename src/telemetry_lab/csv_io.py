@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from telemetry_lab.text_utils import repair_mojibake
+
 
 def dedupe_columns(columns: list[str]) -> list[str]:
     seen: dict[str, int] = {}
@@ -15,6 +17,7 @@ def dedupe_columns(columns: list[str]) -> list[str]:
     for i, name in enumerate(columns):
         if i == 0:
             name = name.lstrip("\ufeff").removeprefix("Ã¯Â»Â¿")
+        name = repair_mojibake(name)
         name = name.strip() or f"column_{i}"
         if name in seen:
             seen[name] += 1
