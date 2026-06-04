@@ -2,19 +2,10 @@
 # Copyright (C) 2026 Gabriel Ferreira
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-CONTAINER_REPORT_DIR = Path("/data/reports")
-
-DEFAULT_DIR = Path(
-    "/mnt/c/Users/gabri/OneDrive/Documents/tools/Desmerdificar o windows/"
-    "relatorio de sensores/cinebench 2026"
-)
-
-ALT_DEFAULT_DIR = Path(
-    "/mnt/c/Users/gabri/OneDrive/Documents/tools/Desmerd\u00edficar o windows/"
-    "relat\u00f3rio de sensores/cinebench 2026"
-)
+REPORT_DIR_ENV = "TELEMETRY_LAB_REPORT_DIR"
 
 KNOWN_CONTEXT_TERMS = {
     "benchmarks",
@@ -70,12 +61,13 @@ INDEX = {
 
 
 def default_report_path() -> str:
-    if CONTAINER_REPORT_DIR.exists():
-        csvs = sorted(CONTAINER_REPORT_DIR.rglob("*.csv")) + sorted(CONTAINER_REPORT_DIR.rglob("*.CSV"))
-        if csvs:
-            return str(csvs[0])
-        return str(CONTAINER_REPORT_DIR)
-    if ALT_DEFAULT_DIR.exists():
-        csvs = sorted(ALT_DEFAULT_DIR.glob("*.CSV")) + sorted(ALT_DEFAULT_DIR.glob("*.csv"))
-        return str(csvs[0] if csvs else ALT_DEFAULT_DIR)
-    return str(DEFAULT_DIR)
+    configured = os.environ.get(REPORT_DIR_ENV, "").strip()
+    if not configured:
+        return ""
+    report_dir = Path(configured).expanduser()
+    if not report_dir.exists():
+        return ""
+    if report_dir.is_file():
+        return str(report_dir)
+    csvs = sorted(report_dir.rglob("*.csv")) + sorted(report_dir.rglob("*.CSV"))
+    return str(csvs[0] if csvs else report_dir)

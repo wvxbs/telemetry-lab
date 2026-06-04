@@ -57,12 +57,13 @@ def make_ui_report(source: str, df: pd.DataFrame, mtime_ns: int | None = None, s
 
 
 def load_report_widget(prefix: str, default_path: str = "") -> Report | None:
-    path = st.text_input(tr("csv_path"), value=default_path, key=f"{prefix}_path")
     upload = st.file_uploader(tr("upload_csv"), type=["csv", "CSV"], key=f"{prefix}_upload")
-    live = st.checkbox(tr("live_reload"), value=False, key=f"{prefix}_live")
-    if live:
-        refresh = st.number_input(tr("refresh_seconds"), min_value=2, max_value=120, value=10, key=f"{prefix}_refresh")
-        components.html(f"<meta http-equiv='refresh' content='{int(refresh)}'>", height=0)
+    with st.expander(tr("optional_path"), expanded=bool(default_path)):
+        path = st.text_input(tr("csv_path"), value=default_path, help=tr("path_help"), key=f"{prefix}_path")
+        live = st.checkbox(tr("live_reload"), value=False, key=f"{prefix}_live")
+        if live:
+            refresh = st.number_input(tr("refresh_seconds"), min_value=2, max_value=120, value=10, key=f"{prefix}_refresh")
+            components.html(f"<meta http-equiv='refresh' content='{int(refresh)}'>", height=0)
     try:
         if upload is not None:
             data = upload.getvalue()
