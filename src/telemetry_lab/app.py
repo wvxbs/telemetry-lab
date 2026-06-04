@@ -20,7 +20,9 @@ from telemetry_lab.charts import render_chart
 from telemetry_lab.config import INDEX, default_report_path
 from telemetry_lab.csv_io import load_csv_path, load_uploaded_csv, parse_hwinfo_csv_bytes
 from telemetry_lab.i18n import translate
+from telemetry_lab.metrics import metric_label, metric_options_for_query
 from telemetry_lab.models import Report
+from telemetry_lab.report_views import render_fps_view, render_glossary_view, render_power_view, render_temperature_view
 from telemetry_lab.text_utils import category_for_metric, pretty_token, repair_mojibake, slugify
 from telemetry_lab.units import display_numeric_frame, normalize_temperature_unit
 
@@ -82,6 +84,32 @@ def load_report_widget(prefix: str, default_path: str = "") -> Report | None:
     except Exception as exc:
         st.error(str(exc))
     return None
+
+
+def load_many_reports_widget(prefix: str, default_path: str = "") -> list[Report]:
+    reports: list[Report] = []
+    uploads = st.file_uploader(tr("upload_csv"), type=["csv", "CSV"], accept_multiple_files=True, key=f"{prefix}_uploads")
+    if uploads:
+        for upload in uploads:
+            data = upload.getvalue()
+            reports.append(make_ui_report(upload.name, load_uploaded_csv(upload.name, data), size=len(data)))
+    with st.expander(tr("optional_path"), expanded=bool(default_path)):
+        paths_text = st.text_area(tr("csv_path"), value=default_path, help=tr("path_help"), key=f"{prefix}_paths")
+        live = st.checkbox(tr("live_reload"), value=False, key=f"{prefix}_live")
+        if live:
+            refresh = st.number_input(tr("refresh_seconds"), min_value=2, max_value=120, value=10, key=f"{prefix}_refresh")
+            components.html(f"<meta http-equiv='refresh' content='{int(refresh)}'>", height=0)
+        for raw_path in [line.strip() for line in paths_text.splitlines() if line.strip()]:
+            try:
+                p = Path(raw_path).expanduser()
+                files = sorted(p.rglob("*.csv")) + sorted(p.rglob("*.CSV")) if p.is_dir() else [p]
+                for file in files:
+                    if file.exists():
+                        df, mtime_ns, size = load_csv_path(str(file), live, load_csv_path_cached)
+                        reports.append(make_ui_report(str(file), df, mtime_ns, size))
+            except Exception as exc:
+                st.error(f"{raw_path}: {exc}")
+    return reports
 
 
 def metric_row(values: list[tuple[str, Any, str | None]]) -> None:
@@ -173,7 +201,10 @@ def render_report(report: Report) -> None:
         }
         group = st.selectbox(tr("category"), [name for name, cols in groups.items() if cols] or ["Tudo"])
         default = groups.get(group, list(report.numeric.columns))[:5]
-        cols = st.multiselect(tr("metric_picker"), list(report.numeric.columns), default=default)
+        query = st.text_input("Buscar metricas", key="report_metric_search")
+        options = metric_options_for_query(list(report.numeric.columns), query)
+        default = [col for col in default if col in options] or options[:5]
+        cols = st.multiselect(tr("metric_picker"), options, default=default, format_func=metric_label)
         chart_type = st.selectbox(tr("chart_type"), ["Linha", "\u00c1rea", "Dispers\u00e3o", "Barras", "Heatmap", "Tabela"])
         render_chart(report, chart_type, "time", cols)
     with tab_raw:
@@ -308,7 +339,9 @@ def render_compare() -> None:
     if not common:
         st.warning("N\u00e3o h\u00e1 m\u00e9tricas num\u00e9ricas em comum.")
         return
-    metrics = st.multiselect(tr("metric_picker"), common, default=common[: min(5, len(common))])
+    query = st.text_input("Buscar metricas", key="compare_metric_search")
+    options = metric_options_for_query(common, query)
+    metrics = st.multiselect(tr("metric_picker"), options, default=options[: min(5, len(options))], format_func=metric_label)
     rows = []
     for label, report in [("A", a), ("B", b)]:
         for metric in metrics:
@@ -345,7 +378,9 @@ def render_custom_chart(report: Report | None) -> None:
     chart_type = st.selectbox(tr("chart_type"), ["Linha", "\u00c1rea", "Dispers\u00e3o", "Barras", "Heatmap", "Tabela"], key="custom_type")
     x_options = ["time"] + cols
     x_axis = st.selectbox(tr("x_axis"), x_options, key="custom_x")
-    y_axis = st.multiselect(tr("y_axis"), cols, default=cols[: min(3, len(cols))], key="custom_y")
+    query = st.text_input("Buscar metricas", key="custom_metric_search")
+    options = metric_options_for_query(cols, query)
+    y_axis = st.multiselect(tr("y_axis"), options, default=options[: min(3, len(options))], key="custom_y", format_func=metric_label)
     render_chart(report, chart_type, x_axis, y_axis, height=460)
 
 
@@ -365,7 +400,18 @@ def main() -> None:
     st.title(tr("page"))
     st.caption(tr("tagline"))
 
-    tab_report, tab_compare, tab_bench, tab_custom = st.tabs([tr("report"), tr("compare"), tr("benchmarks"), tr("custom_chart")])
+    tab_report, tab_power, tab_temp, tab_fps, tab_compare, tab_bench, tab_custom, tab_glossary = st.tabs(
+        [
+            tr("report"),
+            tr("power"),
+            tr("temperatures"),
+            tr("frames"),
+            tr("compare"),
+            tr("benchmarks"),
+            tr("custom_chart"),
+            tr("glossary"),
+        ]
+    )
     report: Report | None = None
     with tab_report:
         with st.sidebar:
@@ -377,7 +423,27 @@ def main() -> None:
             st.info(tr("no_report"))
     with tab_compare:
         render_compare()
+    with tab_power:
+        st.subheader(tr("power"))
+        reports = load_many_reports_widget("power_reports", default_report_path())
+        if not reports and report:
+            reports = [report]
+        render_power_view([display_report(item) for item in reports])
+    with tab_temp:
+        st.subheader(tr("temperatures"))
+        reports = load_many_reports_widget("temp_reports", default_report_path())
+        if not reports and report:
+            reports = [report]
+        render_temperature_view([display_report(item) for item in reports])
+    with tab_fps:
+        st.subheader(tr("frames"))
+        reports = load_many_reports_widget("fps_reports", default_report_path())
+        if not reports and report:
+            reports = [report]
+        render_fps_view([display_report(item) for item in reports])
     with tab_bench:
         render_benchmarks()
     with tab_custom:
         render_custom_chart(display_report(report) if report else None)
+    with tab_glossary:
+        render_glossary_view(display_report(report) if report else None)
