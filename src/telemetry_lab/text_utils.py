@@ -7,7 +7,7 @@ import unicodedata
 
 
 def repair_mojibake(value: str) -> str:
-    if not any(marker in value for marker in ("Ã", "Â", "\ufffd")):
+    if not any(marker in value for marker in ("\u00c3", "\u00c2", "\ufffd")):
         return value
     try:
         repaired = value.encode("cp1252", errors="strict").decode("utf-8", errors="strict")
