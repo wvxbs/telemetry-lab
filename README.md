@@ -20,31 +20,32 @@ It is especially useful for:
 
 Instead of opening a CSV and hunting for meaning, you upload the report and get charts, summaries, comparisons, benchmark records, and custom visualizations in one place.
 
-## Apresentação
+## Apresentacao
 
-Quer uma dashboard bonita e direta com as informações reais do seu PC? Rode um relatório CSV no HWiNFO64, abra no Telemetry Lab e transforme dados brutos de sensores em uma visão clara sobre temperaturas, consumo, clocks, carga, memória, armazenamento e comportamento do sistema.
+Quer uma dashboard bonita e direta com as informacoes reais do seu PC? Rode um relatorio CSV no HWiNFO64, abra no Telemetry Lab e transforme dados brutos de sensores em uma visao clara sobre temperaturas, consumo, clocks, carga, memoria, armazenamento e comportamento do sistema.
 
-O Telemetry Lab ajuda você a entender o que aconteceu durante um benchmark, uma partida, um render, uma exportação, uma compilação ou qualquer carga pesada. Ele foi feito para quem quer resposta, não uma pasta cheia de prints e arquivos CSV gigantes que ninguém tem paciência de ler na mão.
+O Telemetry Lab ajuda voce a entender o que aconteceu durante um benchmark, uma partida, um render, uma exportacao, uma compilacao ou qualquer carga pesada. Ele foi feito para quem quer resposta, nao uma pasta cheia de prints e arquivos CSV gigantes que ninguem tem paciencia de ler na mao.
 
-Com ele, você consegue ver como o PC se comporta sob pressão, comparar execuções diferentes, organizar scores de benchmarks e relacionar cada resultado ao log de telemetria capturado durante o teste. Isso ajuda a responder perguntas como: o jogo está limitado por CPU? A GPU bateu limite de energia? A temperatura mudou depois de um ajuste? A nova configuração realmente melhorou alguma coisa?
+Com ele, voce consegue ver como o PC se comporta sob pressao, comparar execucoes diferentes, organizar scores de benchmarks e relacionar cada resultado ao log de telemetria capturado durante o teste. Isso ajuda a responder perguntas como: o jogo esta limitado por CPU? A GPU bateu limite de energia? A temperatura mudou depois de um ajuste? A nova configuracao realmente melhorou alguma coisa?
 
-Ele é especialmente útil para:
+Ele e especialmente util para:
 
-- analisar desempenho em jogos, de sessões rápidas a testes repetíveis;
-- acompanhar benchmarks, inclusive ferramentas que não guardam histórico de scores;
-- avaliar programas de criação, renderização, exportação, compilação e edição;
-- comparar antes e depois de drivers, BIOS, refrigeração, energia ou ajustes finos;
-- criar um histórico pessoal de desempenho sem depender de screenshots.
+- analisar desempenho em jogos, de sessoes rapidas a testes repetiveis;
+- acompanhar benchmarks, inclusive ferramentas que nao guardam historico de scores;
+- avaliar programas de criacao, renderizacao, exportacao, compilacao e edicao;
+- comparar antes e depois de drivers, BIOS, refrigeracao, energia ou ajustes finos;
+- criar um historico pessoal de desempenho sem depender de screenshots.
 
-Em vez de abrir um CSV e procurar significado no caos, você sobe o relatório e tem gráficos, resumos, comparações, registros de benchmark e visualizações customizadas em um só lugar.
+Em vez de abrir um CSV e procurar significado no caos, voce sobe o relatorio e tem graficos, resumos, comparacoes, registros de benchmark e visualizacoes customizadas em um so lugar.
 
 ## Features
 
 - Open HWiNFO64 CSV reports directly from the browser.
-- Use typed paths when the app can access them, such as local paths or Docker bind mounts.
+- Use typed paths only when you intentionally expose a path to the app process, such as local development or an optional Docker bind mount.
 - Infer context from file and folder names, such as `benchmarks/games/valorant/report.csv`.
 - Keep working even when the path has no useful context, using a general report fallback.
 - Preserve rich views for known Cinebench 2026 logs while still exposing generic numeric sensors from any HWiNFO CSV.
+- Switch temperature display between Celsius and Fahrenheit.
 - Register benchmark results with custom benchmark names, score names, values, and units.
 - Save benchmark records through the browser, not inside the container.
 - Load saved benchmark JSON files back into the app.
@@ -55,9 +56,9 @@ Em vez de abrir um CSV e procurar significado no caos, você sobe o relatório e
 
 The app is in Portuguese by default and includes an English switch in the sidebar.
 
-## Docker File Model
+## Browser File Model
 
-In Docker mode, the container serves the app. It should not be used as the user's file manager and benchmark files are not saved inside it.
+The browser is the main file interface. The container serves the app, but it is not the user's file manager and benchmark files are not saved inside it unless the user explicitly downloads or saves them through the browser.
 
 Use the browser to manage files:
 
@@ -66,7 +67,7 @@ Use the browser to manage files:
 - in Chrome/Edge, use the directory picker button to choose a folder and write the JSON directly there;
 - upload existing benchmark JSON files to read them back.
 
-The typed path input still exists, but it only works for paths the app process can see. In Docker that means paths mounted into the container, for example `/data/reports/...`. For ordinary user-selected files, prefer browser upload.
+The optional typed path input exists for advanced cases only. It only works for paths the app process can see. In Docker, that means a bind mount you configured yourself. For ordinary user-selected files, use browser upload.
 
 ## Docker
 
@@ -82,15 +83,25 @@ Run detached with Docker Compose:
 docker compose up -d --build
 ```
 
-Open the dashboard at <http://localhost:8501>.
+Open the dashboard at <http://localhost:8501>. Choose the CSV in the browser, then save benchmark records through download or the browser directory picker.
 
-If you want typed paths inside Docker, mount a read-only reports folder like this:
+No volume is required for normal use.
 
-```text
-/path/to/your/hwinfo-reports -> /data/reports (read-only)
+## Optional Mounted Reports
+
+Mounting reports is optional. Use it only for very large files, repeated comparisons, or live reload from a CSV that is still being written.
+
+```bash
+docker run -d \
+  --name telemetry-lab \
+  --restart unless-stopped \
+  -p 8501:8501 \
+  -e TELEMETRY_LAB_REPORT_DIR=/reports \
+  -v "/path/to/your/hwinfo-reports:/reports:ro" \
+  wvxbs/telemetry-lab:latest
 ```
 
-No write volume is required for benchmark records because saving is browser-managed.
+The `TELEMETRY_LAB_REPORT_DIR` value is only a convenience default for the optional path field. The browser upload flow works without it.
 
 ## Detached Docker Run
 
@@ -101,11 +112,8 @@ docker run -d \
   --name telemetry-lab \
   --restart unless-stopped \
   -p 8501:8501 \
-  -v "/path/to/your/hwinfo-reports:/data/reports:ro" \
   wvxbs/telemetry-lab:latest
 ```
-
-Replace `/path/to/your/hwinfo-reports` with the folder that contains your HWiNFO64 CSV files. If you do not need typed paths inside Docker, omit the `-v` mount and use only browser uploads.
 
 ## Local Development
 
