@@ -14,6 +14,7 @@ RUN pip install --upgrade pip \
     && pip install -r requirements.txt
 
 COPY app.py ./
+COPY src ./src
 
 EXPOSE 8501
 
