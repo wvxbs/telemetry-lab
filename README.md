@@ -46,6 +46,9 @@ Em vez de abrir um CSV e procurar significado no caos, voce sobe o relatorio e t
 - Keep working even when the path has no useful context, using a general report fallback.
 - Preserve rich views for known Cinebench 2026 logs while still exposing generic numeric sensors from any HWiNFO CSV.
 - Switch temperature display between Celsius and Fahrenheit.
+- Use rich Power, Temperatures, and Frames tabs for focused analysis and multi-report comparison.
+- Estimate system power from available CPU/GPU power sensors when a direct system total is not available.
+- Inspect a generated glossary and possible redundant metric families before deciding what to chart.
 - Register benchmark results with custom benchmark names, score names, values, and units.
 - Save benchmark records through the browser, not inside the container.
 - Load saved benchmark JSON files back into the app.

@@ -213,9 +213,6 @@ def battery_metrics(columns: list[str]) -> list[str]:
 
 def estimated_system_power(numeric: pd.DataFrame) -> pd.Series:
     cols = list(numeric.columns)
-    explicit = [col for col in cols if is_system_metric(col) and is_power_metric(col)]
-    if explicit:
-        return numeric[explicit[0]]
     cpu = [col for col in cols if is_cpu_metric(col) and is_power_metric(col)]
     gpu = [col for col in cols if is_gpu_metric(col) and is_power_metric(col)]
     parts = []
@@ -224,6 +221,9 @@ def estimated_system_power(numeric: pd.DataFrame) -> pd.Series:
     if gpu:
         parts.append(numeric[gpu[0]])
     if not parts:
+        explicit = [col for col in cols if is_system_metric(col) and is_power_metric(col)]
+        if explicit:
+            return numeric[explicit[0]]
         return pd.Series(index=numeric.index, dtype="float64")
     return pd.concat(parts, axis=1).sum(axis=1, min_count=1)
 
