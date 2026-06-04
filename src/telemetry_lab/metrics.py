@@ -101,6 +101,23 @@ def metric_group(name: str) -> str:
     return "Outros"
 
 
+def metric_component(name: str) -> str:
+    if is_gpu_metric(name):
+        return "GPU"
+    if is_cpu_metric(name):
+        return "CPU"
+    if is_system_metric(name):
+        return "Sistema"
+    if is_battery_metric(name):
+        return "Bateria"
+    low = ascii_fold(name)
+    if any(term in low for term in ("disk", "ssd", "drive", "nvme")):
+        return "Disco"
+    if any(term in low for term in ("memory", "memoria", "ram", "vram")):
+        return "Memoria"
+    return "Outro"
+
+
 def describe_metric(name: str) -> MetricInfo:
     group = metric_group(name)
     aliases = tuple(sorted(search_terms(group) | search_terms(name)))[:8]
@@ -117,6 +134,29 @@ def describe_metric(name: str) -> MetricInfo:
     else:
         desc = "Sensor numerico preservado do HWiNFO para analise livre."
     return MetricInfo(name=name, category=group, description=desc, aliases=aliases)
+
+
+def redundancy_frame(columns: list[str]) -> pd.DataFrame:
+    groups: dict[tuple[str, str], list[str]] = {}
+    for col in columns:
+        group = metric_group(col)
+        if group not in {"Potencia", "Temperatura", "FPS", "Bateria"}:
+            continue
+        key = (metric_component(col), group)
+        groups.setdefault(key, []).append(col)
+    rows = []
+    for (component, group), members in groups.items():
+        if len(members) < 2:
+            continue
+        rows.append(
+            {
+                "Component": component,
+                "Category": group,
+                "Possible duplicates": ", ".join(members),
+                "Note": "Revise antes de comparar: HWiNFO pode expor sensor fisico, sensor agregado e metrica canonica do Telemetry Lab para a mesma familia.",
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def glossary_frame(columns: list[str]) -> pd.DataFrame:

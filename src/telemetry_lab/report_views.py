@@ -15,6 +15,7 @@ from telemetry_lab.metrics import (
     metric_group,
     metric_label,
     power_metrics,
+    redundancy_frame,
     temperature_metrics,
 )
 from telemetry_lab.models import Report
@@ -188,8 +189,12 @@ def render_glossary_view(report: Report | None) -> None:
         st.info("Carregue um relatorio para ver o glossario das colunas.")
         return
     numeric_glossary = glossary_frame(list(report.numeric.columns))
+    redundancy = redundancy_frame(list(report.numeric.columns))
     raw_only = [col for col in report.df.columns if col not in set(report.numeric.columns)]
     raw_glossary = glossary_frame(raw_only)
+    if not redundancy.empty:
+        st.subheader("Possiveis redundancias")
+        st.dataframe(redundancy, width="stretch", hide_index=True)
     st.subheader("Metricas numericas")
     st.dataframe(numeric_glossary, width="stretch", hide_index=True)
     with st.expander("Colunas brutas do HWiNFO"):
