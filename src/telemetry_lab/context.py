@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Callable, Any
 
 from telemetry_lab.config import KNOWN_CONTEXT_TERMS
-from telemetry_lab.text_utils import pretty_token, slugify
+from telemetry_lab.text_utils import pretty_token, repair_mojibake, slugify
 
 
 def infer_context(source: str, translate: Callable[[str], str] | None = None) -> dict[str, Any]:
@@ -37,6 +37,6 @@ def infer_context(source: str, translate: Callable[[str], str] | None = None) ->
         "category": category,
         "workload": workload,
         "tags": sorted(set(hits)) or ["geral"],
-        "file_name": p.name,
-        "folder": str(p.parent) if str(p.parent) != "." else "",
+        "file_name": repair_mojibake(p.name),
+        "folder": repair_mojibake(str(p.parent)) if str(p.parent) != "." else "",
     }

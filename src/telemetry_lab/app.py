@@ -21,7 +21,7 @@ from telemetry_lab.config import INDEX, default_report_path
 from telemetry_lab.csv_io import load_csv_path, load_uploaded_csv, parse_hwinfo_csv_bytes
 from telemetry_lab.i18n import translate
 from telemetry_lab.models import Report
-from telemetry_lab.text_utils import category_for_metric, pretty_token, slugify
+from telemetry_lab.text_utils import category_for_metric, pretty_token, repair_mojibake, slugify
 from telemetry_lab.units import display_numeric_frame, normalize_temperature_unit
 
 
@@ -72,7 +72,7 @@ def load_report_widget(prefix: str, default_path: str = "") -> Report | None:
             if p.is_dir():
                 files = sorted(p.rglob("*.csv")) + sorted(p.rglob("*.CSV"))
                 if files:
-                    chosen = st.selectbox("CSV", files, format_func=lambda item: str(item), key=f"{prefix}_csv_select")
+                    chosen = st.selectbox("CSV", files, format_func=lambda item: repair_mojibake(str(item)), key=f"{prefix}_csv_select")
                     df, mtime_ns, size = load_csv_path(str(chosen), live, load_csv_path_cached)
                     return make_ui_report(str(chosen), df, mtime_ns, size)
             elif p.exists():
@@ -98,7 +98,7 @@ def render_report(report: Report) -> None:
     st.session_state["current_report_context"] = report.context
     ctx = report.context
     st.subheader(ctx["title"])
-    st.caption(f"{report.source}")
+    st.caption(repair_mojibake(report.source))
     repaired = int(report.df.attrs.get("csv_repaired_short_rows", 0)) + int(report.df.attrs.get("csv_repaired_long_rows", 0))
     if repaired:
         lines = report.df.attrs.get("csv_repaired_lines", [])
