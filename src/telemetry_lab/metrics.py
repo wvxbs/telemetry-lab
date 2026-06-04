@@ -54,7 +54,7 @@ def metric_label(name: str) -> str:
 
 def is_power_metric(name: str) -> bool:
     low = ascii_fold(name)
-    if "limit" in low or "power limit" in low:
+    if "limit" in low or "limite" in low or "pl1" in low or "pl2" in low:
         return False
     return " w" in low or low.endswith("w") or "power" in low or "potencia" in low or "consumo" in low
 

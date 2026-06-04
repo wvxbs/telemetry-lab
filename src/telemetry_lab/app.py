@@ -297,7 +297,10 @@ def render_benchmarks() -> None:
     with left:
         st.download_button(tr("download"), encoded, file_name=file_name, mime="application/json")
     with right:
-        render_browser_save_button(file_name, content, tr("browser_save"), tr("browser_save_help"))
+        if submitted:
+            render_browser_save_button(file_name, content, tr("browser_save"), tr("browser_save_help"))
+        else:
+            st.caption(tr("browser_save_help"))
 
     st.divider()
     st.subheader(tr("loaded_files"))
@@ -327,7 +330,7 @@ def render_compare() -> None:
     left, right = st.columns(2)
     with left:
         st.markdown("### A")
-        a = load_report_widget("compare_a", default_report_path())
+        a = load_report_widget("compare_a", "")
     with right:
         st.markdown("### B")
         b = load_report_widget("compare_b", "")
@@ -425,19 +428,19 @@ def main() -> None:
         render_compare()
     with tab_power:
         st.subheader(tr("power"))
-        reports = load_many_reports_widget("power_reports", default_report_path())
+        reports = load_many_reports_widget("power_reports", "")
         if not reports and report:
             reports = [report]
         render_power_view([display_report(item) for item in reports])
     with tab_temp:
         st.subheader(tr("temperatures"))
-        reports = load_many_reports_widget("temp_reports", default_report_path())
+        reports = load_many_reports_widget("temp_reports", "")
         if not reports and report:
             reports = [report]
         render_temperature_view([display_report(item) for item in reports])
     with tab_fps:
         st.subheader(tr("frames"))
-        reports = load_many_reports_widget("fps_reports", default_report_path())
+        reports = load_many_reports_widget("fps_reports", "")
         if not reports and report:
             reports = [report]
         render_fps_view([display_report(item) for item in reports])

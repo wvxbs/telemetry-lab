@@ -15,7 +15,9 @@ def normalize_temperature_unit(unit: str | None) -> TemperatureUnit:
 
 def is_temperature_metric(name: str) -> bool:
     low = name.lower()
-    if "temp" in low or "hotspot" in low:
+    if "tempo" in low or "frame time" in low or "quadro" in low:
+        return False
+    if "temperatura" in low or "temperature" in low or "hotspot" in low:
         return True
     return bool(re.search(r"(\s|_|-|\()(\u00b0?c|celsius)(\)|$|\s)", low) or low.endswith(" c"))
 

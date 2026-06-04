@@ -180,7 +180,8 @@ def render_fps_view(reports: list[Report]) -> None:
         base = base[(base[fps_col] >= min_fps) & (base[fps_col] <= max_fps)]
         corr = base.corr(numeric_only=True)[fps_col].drop(labels=[fps_col], errors="ignore").dropna()
         if not corr.empty:
-            corr_df = corr.abs().sort_values(ascending=False).head(10).rename("Abs correlation").reset_index(names="Metric")
+            corr_df = corr.abs().sort_values(ascending=False).head(10).rename("Abs correlation").reset_index()
+            corr_df = corr_df.rename(columns={"index": "Metric"})
             st.dataframe(corr_df, width="stretch", hide_index=True)
 
 
