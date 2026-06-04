@@ -41,6 +41,9 @@ TEXT = {
         "saved": "Arquivo salvo.",
         "browser_save_help": "No Chrome/Edge, escolha uma pasta local e o navegador grava o arquivo sem passar pelo container.",
         "loaded_files": "Arquivos registrados",
+        "temperature_unit": "Temperatura",
+        "celsius": "Celsius",
+        "fahrenheit": "Fahrenheit",
     },
     "en": {
         "page": "Telemetry Lab",
@@ -80,6 +83,9 @@ TEXT = {
         "saved": "File saved.",
         "browser_save_help": "In Chrome/Edge, choose a local folder and the browser writes the file without using the container filesystem.",
         "loaded_files": "Registered files",
+        "temperature_unit": "Temperature",
+        "celsius": "Celsius",
+        "fahrenheit": "Fahrenheit",
     },
 }
 

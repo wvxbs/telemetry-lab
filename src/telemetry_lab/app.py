@@ -22,11 +22,28 @@ from telemetry_lab.csv_io import load_csv_path, load_uploaded_csv, parse_hwinfo_
 from telemetry_lab.i18n import translate
 from telemetry_lab.models import Report
 from telemetry_lab.text_utils import category_for_metric, pretty_token, slugify
+from telemetry_lab.units import display_numeric_frame, normalize_temperature_unit
 
 
 def tr(key: str) -> str:
     lang = st.session_state.get("lang", "pt")
     return translate(lang, key)
+
+
+def selected_temperature_unit() -> str:
+    return normalize_temperature_unit(st.session_state.get("temperature_unit", "C"))
+
+
+def display_report(report: Report) -> Report:
+    return Report(
+        source=report.source,
+        df=report.df,
+        time=report.time,
+        numeric=display_numeric_frame(report.numeric, selected_temperature_unit()),
+        context=report.context,
+        mtime_ns=report.mtime_ns,
+        size=report.size,
+    )
 
 
 @st.cache_data(show_spinner=False)
@@ -107,7 +124,11 @@ def render_report(report: Report) -> None:
                 "CPU package W",
                 "GPU W",
                 "CPU package C",
+                "CPU package F",
                 "GPU temp C",
+                "GPU temp F",
+                "GPU hotspot C",
+                "GPU hotspot F",
                 "GPU core load %",
                 "Physical memory load %",
                 "Disk total activity %",
@@ -144,7 +165,7 @@ def render_report(report: Report) -> None:
     with tab_charts:
         groups = {
             "Pot\u00eancia": [c for c in report.numeric.columns if " W" in c or "power" in c.lower()],
-            "Temperatura": [c for c in report.numeric.columns if "temp" in c.lower() or " C" in c],
+            "Temperatura": [c for c in report.numeric.columns if "temp" in c.lower() or " C" in c or " F" in c],
             "Carga": [c for c in report.numeric.columns if "%" in c or "load" in c.lower()],
             "Clocks": [c for c in report.numeric.columns if "clock" in c.lower() or "mhz" in c.lower()],
             "Tudo": list(report.numeric.columns),
@@ -280,6 +301,8 @@ def render_compare() -> None:
         b = load_report_widget("compare_b", "")
     if not a or not b:
         return
+    a = display_report(a)
+    b = display_report(b)
     common = sorted(set(a.numeric.columns) & set(b.numeric.columns))
     if not common:
         st.warning("N\u00e3o h\u00e1 m\u00e9tricas num\u00e9ricas em comum.")
@@ -330,6 +353,13 @@ def main() -> None:
     with st.sidebar:
         lang_label = st.selectbox("Idioma / Language", ["pt", "en"], format_func=lambda item: "Portugu\u00eas" if item == "pt" else "English")
         st.session_state["lang"] = lang_label
+        st.selectbox(
+            tr("temperature_unit"),
+            ["C", "F"],
+            index=0,
+            format_func=lambda item: tr("celsius") if item == "C" else tr("fahrenheit"),
+            key="temperature_unit",
+        )
         st.caption(f"Telemetry Lab {APP_VERSION}")
     st.title(tr("page"))
     st.caption(tr("tagline"))
@@ -341,7 +371,7 @@ def main() -> None:
             st.header(tr("input"))
             report = load_report_widget("main", default_report_path())
         if report:
-            render_report(report)
+            render_report(display_report(report))
         else:
             st.info(tr("no_report"))
     with tab_compare:
@@ -349,4 +379,4 @@ def main() -> None:
     with tab_bench:
         render_benchmarks()
     with tab_custom:
-        render_custom_chart(report)
+        render_custom_chart(display_report(report) if report else None)
