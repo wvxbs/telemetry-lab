@@ -64,6 +64,7 @@ def avg_by_indexes(df: pd.DataFrame, indexes: list[int]) -> pd.Series:
 def build_numeric(df: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame(index=df.index)
     fallback = {
+        "CPU total %": col_by_index(df, INDEX["cpu_total_pct"]),
         "CPU package W": col_by_index(df, INDEX["cpu_package_w"]),
         "System total W": col_by_index(df, INDEX["system_total_w"]),
         "CPU package C": col_by_index(df, INDEX["cpu_package_temp_c"]),
@@ -80,6 +81,7 @@ def build_numeric(df: pd.DataFrame) -> pd.DataFrame:
         "E-core effective avg MHz": avg_by_indexes(df, INDEX["e_core_effective"]),
     }
     detected = {
+        "CPU total %": avg_matching(df, "cpu", "(total|load|uso|util|carga)", "(%|util)"),
         "CPU package W": avg_matching(df, "cpu", "package", "(w|power|pot.ncia)"),
         "System total W": avg_matching(df, "system", "(total|power|w)"),
         "CPU package C": avg_matching(df, "cpu", "package", "(c|temp)"),

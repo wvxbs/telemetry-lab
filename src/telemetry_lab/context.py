@@ -22,12 +22,15 @@ def infer_context(source: str, translate: Callable[[str], str] | None = None) ->
     workload = hits[-1] if hits else parent or stem or "geral"
     category = "geral"
     joined = "/".join(tokens)
-    if any(term in joined for term in ("games", "game", "valorant")):
+    if any(term in joined for term in ("games", "game", "jogos", "jogo", "valorant")):
         category = "games"
     elif any(term in joined for term in ("produtividade", "productivity")):
         category = "produtividade"
     elif any(term in joined for term in ("benchmarks", "benchmark", "cinebench", "geekbench")):
         category = "benchmarks"
+    generic_workload_terms = ("benchmark", "history", "games", "game", "jogos", "jogo", "benchmarks")
+    if parent and not any(term in parent for term in generic_workload_terms):
+        workload = parent
     title_bits = [pretty_token(category), pretty_token(workload)]
     title = " / ".join(dict.fromkeys([bit for bit in title_bits if bit]))
     if not title:

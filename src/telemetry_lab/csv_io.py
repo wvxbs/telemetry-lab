@@ -16,7 +16,7 @@ def dedupe_columns(columns: list[str]) -> list[str]:
     result: list[str] = []
     for i, name in enumerate(columns):
         if i == 0:
-            name = name.lstrip("\ufeff").removeprefix("\u00c3\u00af\u00c2\u00bb\u00c2\u00bf")
+            name = name.lstrip("\ufeff").removeprefix("\u00ef\u00bb\u00bf").removeprefix("\u00c3\u00af\u00c2\u00bb\u00c2\u00bf")
         name = repair_mojibake(name)
         name = name.strip() or f"column_{i}"
         if name in seen:

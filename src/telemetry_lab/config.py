@@ -12,6 +12,8 @@ KNOWN_CONTEXT_TERMS = {
     "benchmark",
     "games",
     "game",
+    "jogos",
+    "jogo",
     "valorant",
     "cinebench",
     "geekbench",

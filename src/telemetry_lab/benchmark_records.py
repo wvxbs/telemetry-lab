@@ -8,7 +8,7 @@ from typing import Any
 import pandas as pd
 
 
-def benchmark_payload(name: str, scenario: str, scores: pd.DataFrame, report: dict[str, Any] | None) -> dict[str, Any]:
+def benchmark_payload(name: str, performance_mode: str, scenario: str, scores: pd.DataFrame, report: dict[str, Any] | None) -> dict[str, Any]:
     rows = []
     for row in scores.to_dict("records"):
         metric = str(row.get("Metric", "")).strip()
@@ -21,6 +21,7 @@ def benchmark_payload(name: str, scenario: str, scores: pd.DataFrame, report: di
         "schema": "telemetry-lab.benchmark.v1",
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "benchmark": name.strip() or "Benchmark",
+        "performance_mode": performance_mode.strip() or "Balanced",
         "scenario": scenario.strip() or "geral",
         "scores": rows,
         "linked_report": report,

@@ -20,7 +20,7 @@ from telemetry_lab.charts import render_chart
 from telemetry_lab.config import INDEX, default_report_path
 from telemetry_lab.csv_io import load_csv_path, load_uploaded_csv, parse_hwinfo_csv_bytes
 from telemetry_lab.i18n import translate
-from telemetry_lab.metrics import metric_label, metric_options_for_query
+from telemetry_lab.metrics import fps_metrics, metric_label, metric_options_for_query, power_metrics, temperature_metrics
 from telemetry_lab.models import Report
 from telemetry_lab.report_views import render_fps_view, render_glossary_view, render_power_view, render_temperature_view
 from telemetry_lab.text_utils import category_for_metric, pretty_token, repair_mojibake, slugify
@@ -122,6 +122,17 @@ def metric_row(values: list[tuple[str, Any, str | None]]) -> None:
         col.metric(label, f"{text} {suffix}" if suffix else text)
 
 
+def render_overview_group(report: Report, stats: pd.DataFrame, title: str, metrics: list[str], height: int = 260) -> None:
+    metrics = [metric for metric in metrics if metric in report.numeric.columns]
+    if not metrics:
+        return
+    st.markdown(f"#### {title}")
+    visible_stats = stats[stats["Metric"].isin(metrics)]
+    if not visible_stats.empty:
+        st.dataframe(visible_stats, width="stretch", hide_index=True)
+    render_chart(report, "Linha", "time", metrics[:6], height)
+
+
 def render_report(report: Report) -> None:
     st.session_state["current_report_source"] = report.source
     st.session_state["current_report_context"] = report.context
@@ -144,30 +155,29 @@ def render_report(report: Report) -> None:
         ]
     )
     stats = stats_frame(report.numeric)
-    tab_overview, tab_stats, tab_charts, tab_raw = st.tabs([tr("overview"), tr("stats"), tr("charts"), tr("raw")])
-    with tab_overview:
-        preferred = [
+    section = st.radio(
+        "Secao do relatorio",
+        [tr("overview"), tr("stats"), tr("charts"), tr("raw")],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="report_section",
+    )
+    if section == tr("overview"):
+        render_overview_group(report, stats, tr("power"), power_metrics(list(report.numeric.columns))[:6])
+        render_overview_group(report, stats, tr("temperatures"), temperature_metrics(list(report.numeric.columns))[:6])
+        load_metrics = [
             col
             for col in [
-                "System total W",
-                "CPU package W",
-                "GPU W",
-                "CPU package C",
-                "CPU package F",
-                "GPU temp C",
-                "GPU temp F",
-                "GPU hotspot C",
-                "GPU hotspot F",
                 "GPU core load %",
+                "CPU total %",
                 "Physical memory load %",
                 "Disk total activity %",
+                "Carga da memória física [%]",
             ]
             if col in report.numeric.columns
         ]
-        if preferred:
-            key_stats = stats[stats["Metric"].isin(preferred)]
-            st.dataframe(key_stats, width="stretch", hide_index=True)
-            render_chart(report, "Linha", "time", preferred[:6], 360)
+        render_overview_group(report, stats, "Carga", load_metrics)
+        render_overview_group(report, stats, tr("frames"), fps_metrics(list(report.numeric.columns))[:3], height=220)
         limiter_rows = [
             ("GPU perf limiter", yes_count(report.df, INDEX["gpu_perf_limiter"])),
             ("GPU limit power", yes_count(report.df, INDEX["gpu_perf_power"])),
@@ -179,7 +189,7 @@ def render_report(report: Report) -> None:
         limiter_df = limiter_df[limiter_df["Amostras"] > 0]
         if not limiter_df.empty:
             st.dataframe(limiter_df, width="stretch", hide_index=True)
-    with tab_stats:
+    elif section == tr("stats"):
         categories = sorted({category_for_metric(col) for col in report.numeric.columns})
         chosen_category = st.selectbox(tr("category"), ["Todos"] + categories)
         visible = stats if chosen_category == "Todos" else stats[stats["Metric"].map(category_for_metric) == chosen_category]
@@ -191,7 +201,7 @@ def render_report(report: Report) -> None:
             mime="text/csv",
             key="stats_download",
         )
-    with tab_charts:
+    elif section == tr("charts"):
         groups = {
             "Pot\u00eancia": [c for c in report.numeric.columns if " W" in c or "power" in c.lower()],
             "Temperatura": [c for c in report.numeric.columns if "temp" in c.lower() or " C" in c or " F" in c],
@@ -207,7 +217,7 @@ def render_report(report: Report) -> None:
         cols = st.multiselect(tr("metric_picker"), options, default=default, format_func=metric_label)
         chart_type = st.selectbox(tr("chart_type"), ["Linha", "\u00c1rea", "Dispers\u00e3o", "Barras", "Heatmap", "Tabela"])
         render_chart(report, chart_type, "time", cols)
-    with tab_raw:
+    elif section == tr("raw"):
         st.dataframe(report.df, width="stretch")
         st.download_button(
             tr("download"),
@@ -275,6 +285,7 @@ def render_benchmarks() -> None:
     )
     with st.form("benchmark_form"):
         name = st.text_input(tr("benchmark_name"), value="Cinebench 2026")
+        performance_mode = st.text_input(tr("performance_mode"), value="Balanced")
         scenario = st.text_input(tr("scenario"), value=st.session_state.get("current_report_context", {}).get("title", "geral"))
         scores = st.data_editor(
             default_scores,
@@ -287,7 +298,7 @@ def render_benchmarks() -> None:
     linked = None
     if use_current and st.session_state.get("current_report_source"):
         linked = {"source": st.session_state["current_report_source"], "context": st.session_state.get("current_report_context", {})}
-    payload = benchmark_payload(name, scenario, scores, linked)
+    payload = benchmark_payload(name, performance_mode, scenario, scores, linked)
     content = json.dumps(payload, ensure_ascii=False, indent=2)
     encoded = content.encode("utf-8")
     file_name = f"{slugify(payload['benchmark'])}-{slugify(payload['scenario'])}-{datetime.now():%Y%m%d-%H%M%S}.telemetry-benchmark.json"
@@ -399,54 +410,48 @@ def main() -> None:
             format_func=lambda item: tr("celsius") if item == "C" else tr("fahrenheit"),
             key="temperature_unit",
         )
+        st.header(tr("input"))
+        report = load_report_widget("main", default_report_path())
         st.caption(f"Telemetry Lab {APP_VERSION}")
     st.title(tr("page"))
     st.caption(tr("tagline"))
 
-    tab_report, tab_power, tab_temp, tab_fps, tab_compare, tab_bench, tab_custom, tab_glossary = st.tabs(
-        [
-            tr("report"),
-            tr("power"),
-            tr("temperatures"),
-            tr("frames"),
-            tr("compare"),
-            tr("benchmarks"),
-            tr("custom_chart"),
-            tr("glossary"),
-        ]
+    view = st.radio(
+        "Navegacao principal",
+        [tr("report"), tr("power"), tr("temperatures"), tr("frames"), tr("compare"), tr("benchmarks"), tr("custom_chart"), tr("glossary")],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="main_view",
     )
-    report: Report | None = None
-    with tab_report:
-        with st.sidebar:
-            st.header(tr("input"))
-            report = load_report_widget("main", default_report_path())
+
+    if view == tr("report"):
         if report:
             render_report(display_report(report))
         else:
             st.info(tr("no_report"))
-    with tab_compare:
-        render_compare()
-    with tab_power:
+    elif view == tr("power"):
         st.subheader(tr("power"))
         reports = load_many_reports_widget("power_reports", "")
         if not reports and report:
             reports = [report]
         render_power_view([display_report(item) for item in reports])
-    with tab_temp:
+    elif view == tr("temperatures"):
         st.subheader(tr("temperatures"))
         reports = load_many_reports_widget("temp_reports", "")
         if not reports and report:
             reports = [report]
         render_temperature_view([display_report(item) for item in reports])
-    with tab_fps:
+    elif view == tr("frames"):
         st.subheader(tr("frames"))
         reports = load_many_reports_widget("fps_reports", "")
         if not reports and report:
             reports = [report]
         render_fps_view([display_report(item) for item in reports])
-    with tab_bench:
+    elif view == tr("compare"):
+        render_compare()
+    elif view == tr("benchmarks"):
         render_benchmarks()
-    with tab_custom:
+    elif view == tr("custom_chart"):
         render_custom_chart(display_report(report) if report else None)
-    with tab_glossary:
+    elif view == tr("glossary"):
         render_glossary_view(display_report(report) if report else None)
