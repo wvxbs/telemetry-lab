@@ -115,37 +115,6 @@ Open the dashboard at <http://localhost:8501>. Choose the CSV in the browser, th
 
 No volume is required for normal use.
 
-## Docker Hub CI/CD
-
-This repository includes a GitHub Actions workflow at `.github/workflows/docker-publish.yml`.
-
-The workflow:
-
-- builds the Docker image on pull requests to `main`, without pushing;
-- builds and pushes to Docker Hub on pushes to `main`;
-- builds and pushes version tags matching `v*.*.*`;
-- publishes `latest` from `main`, branch/tag tags, and `sha-...` tags;
-- uses GitHub Actions build cache for faster rebuilds.
-
-Configure these GitHub repository secrets:
-
-```text
-DOCKERHUB_USERNAME=<your Docker Hub username>
-DOCKERHUB_TOKEN=<Docker Hub access token>
-```
-
-By default, the workflow publishes to:
-
-```text
-wvxbs/telemetry-lab
-```
-
-To publish to another Docker Hub repository, set this GitHub repository variable:
-
-```text
-DOCKERHUB_IMAGE=<dockerhub-user>/<repository>
-```
-
 ## Optional Mounted Reports
 
 Mounting reports is optional. Use it only for very large files, repeated comparisons, or live reload from a CSV that is still being written.
