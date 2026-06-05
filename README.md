@@ -72,6 +72,31 @@ Use the browser to manage files:
 
 The optional typed path input exists for advanced cases only. It only works for paths the app process can see. In Docker, that means a bind mount you configured yourself. For ordinary user-selected files, use browser upload.
 
+## Optional File Naming Convention
+
+Telemetry Lab does not require a specific CSV file name. The app should still work when the user opens any HWiNFO64 CSV through the browser picker or types a readable path.
+
+For better automatic context, use meaningful folder names and an optional structured file name. A good pattern is:
+
+```text
+Benchmark History/<machine>/Games/<game>/<performance-mode>-<fps>cap-<dd-mm-yyyy>-<hhmm>.CSV
+```
+
+Example:
+
+```text
+Benchmark History/Dell G15/Games/Cyberpunk 2077/gmode-120cap-05-06-2026-0311.CSV
+```
+
+With that convention, the app can infer:
+
+- category and workload from folders, such as `Games` and `Cyberpunk 2077`;
+- performance mode from names such as `gmode`, `balanced`, `performance`, `turbo`, `silent`, `quiet`, or `eco`;
+- FPS cap from tokens such as `120cap` or `120fpscap`;
+- capture date/time from `05-06-2026-0311`.
+
+These tokens are only hints for labels, filters, and benchmark records. They are not required for loading the CSV, and the dashboard does not depend on fixed container paths.
+
 ## Docker
 
 Build the image using the project naming convention:
