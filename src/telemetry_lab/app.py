@@ -20,7 +20,13 @@ from telemetry_lab.charts import render_chart
 from telemetry_lab.config import INDEX, default_report_path
 from telemetry_lab.csv_io import load_csv_path, load_uploaded_csv, parse_hwinfo_csv_bytes
 from telemetry_lab.i18n import translate
-from telemetry_lab.metrics import fps_metrics, metric_label, metric_options_for_query, power_metrics, temperature_metrics
+from telemetry_lab.metrics import (
+    curated_power_metrics,
+    curated_temperature_metrics,
+    fps_metrics,
+    metric_label,
+    metric_options_for_query,
+)
 from telemetry_lab.models import Report
 from telemetry_lab.report_views import render_fps_view, render_glossary_view, render_power_view, render_temperature_view
 from telemetry_lab.text_utils import category_for_metric, pretty_token, repair_mojibake, slugify
@@ -154,6 +160,15 @@ def render_report(report: Report) -> None:
             (tr("context"), pretty_token(ctx["workload"]), None),
         ]
     )
+    extra_metrics = []
+    if ctx.get("performance_mode"):
+        extra_metrics.append((tr("performance_mode"), ctx["performance_mode"], None))
+    if ctx.get("fps_cap"):
+        extra_metrics.append(("FPS cap", ctx["fps_cap"], "FPS"))
+    if ctx.get("captured_at"):
+        extra_metrics.append(("Captura", ctx["captured_at"], None))
+    if extra_metrics:
+        metric_row(extra_metrics)
     stats = stats_frame(report.numeric)
     section = st.radio(
         "Secao do relatorio",
@@ -163,13 +178,18 @@ def render_report(report: Report) -> None:
         key="report_section",
     )
     if section == tr("overview"):
-        render_overview_group(report, stats, tr("power"), power_metrics(list(report.numeric.columns))[:6])
-        render_overview_group(report, stats, tr("temperatures"), temperature_metrics(list(report.numeric.columns))[:6])
+        render_overview_group(report, stats, tr("power"), curated_power_metrics(list(report.numeric.columns), include_extra=True)[:6])
+        render_overview_group(
+            report,
+            stats,
+            tr("temperatures"),
+            curated_temperature_metrics(list(report.numeric.columns), include_extra=True)[:6],
+        )
         load_metrics = [
             col
             for col in [
                 "GPU core load %",
-                "CPU total %",
+                "CPU total load %",
                 "Physical memory load %",
                 "Disk total activity %",
                 "Carga da memória física [%]",
@@ -285,7 +305,10 @@ def render_benchmarks() -> None:
     )
     with st.form("benchmark_form"):
         name = st.text_input(tr("benchmark_name"), value="Cinebench 2026")
-        performance_mode = st.text_input(tr("performance_mode"), value="Balanced")
+        performance_mode = st.text_input(
+            tr("performance_mode"),
+            value=st.session_state.get("current_report_context", {}).get("performance_mode", "Balanced") or "Balanced",
+        )
         scenario = st.text_input(tr("scenario"), value=st.session_state.get("current_report_context", {}).get("title", "geral"))
         scores = st.data_editor(
             default_scores,

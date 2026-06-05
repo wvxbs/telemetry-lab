@@ -191,7 +191,16 @@ def power_metrics(columns: list[str]) -> list[str]:
     return ranked_metrics(
         columns,
         is_power_metric,
-        ("system total w", "cpu package w", "gpu w", "battery discharge", "charge rate"),
+        (
+            "system total power w",
+            "potencia total do sistema",
+            "cpu package power w",
+            "consumo de energia total da cpu",
+            "gpu total power w",
+            "gpu consumo de energia",
+            "battery discharge",
+            "charge rate",
+        ),
     )
 
 
@@ -199,7 +208,16 @@ def temperature_metrics(columns: list[str]) -> list[str]:
     return ranked_metrics(
         columns,
         is_temperature_metric,
-        ("cpu package", "gpu temp", "gpu hotspot", "ssd", "disk"),
+        (
+            "cpu package temperature c",
+            "cpu package",
+            "gpu temperature c",
+            "temperatura gpu",
+            "gpu hotspot temperature c",
+            "ponto quente da gpu",
+            "ssd",
+            "disk",
+        ),
     )
 
 
@@ -211,10 +229,54 @@ def battery_metrics(columns: list[str]) -> list[str]:
     return ranked_metrics(columns, is_battery_metric, ("discharge", "charge rate", "battery"))
 
 
+def _existing(columns: list[str], preferred: tuple[str, ...]) -> list[str]:
+    available = {ascii_fold(col): col for col in columns}
+    result = []
+    for wanted in preferred:
+        found = available.get(ascii_fold(wanted))
+        if found and found not in result:
+            result.append(found)
+    return result
+
+
+def curated_power_metrics(columns: list[str], include_extra: bool = False) -> list[str]:
+    curated = _existing(
+        columns,
+        (
+            "System total power W",
+            "CPU package power W",
+            "GPU total power W",
+            "System estimated W",
+        ),
+    )
+    if include_extra:
+        curated.extend([col for col in power_metrics(columns) if col not in curated][:8])
+    return curated
+
+
+def curated_temperature_metrics(columns: list[str], include_extra: bool = False) -> list[str]:
+    curated = _existing(
+        columns,
+        (
+            "CPU package temperature C",
+            "CPU package temperature F",
+            "GPU temperature C",
+            "GPU temperature F",
+            "GPU hotspot temperature C",
+            "GPU hotspot temperature F",
+        ),
+    )
+    if include_extra:
+        curated.extend([col for col in temperature_metrics(columns) if col not in curated][:10])
+    return curated
+
+
 def estimated_system_power(numeric: pd.DataFrame) -> pd.Series:
     cols = list(numeric.columns)
-    cpu = [col for col in cols if is_cpu_metric(col) and is_power_metric(col)]
-    gpu = [col for col in cols if is_gpu_metric(col) and is_power_metric(col)]
+    cpu = curated_power_metrics(cols, include_extra=True)
+    cpu = [col for col in cpu if is_cpu_metric(col) and is_power_metric(col)]
+    gpu = curated_power_metrics(cols, include_extra=True)
+    gpu = [col for col in gpu if is_gpu_metric(col) and is_power_metric(col)]
     parts = []
     if cpu:
         parts.append(numeric[cpu[0]])

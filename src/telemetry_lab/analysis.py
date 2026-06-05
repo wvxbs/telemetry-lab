@@ -10,6 +10,7 @@ import pandas as pd
 from telemetry_lab.config import INDEX
 from telemetry_lab.context import infer_context
 from telemetry_lab.models import Report
+from telemetry_lab.text_utils import ascii_fold
 
 
 def numeric_series(series: pd.Series) -> pd.Series:
@@ -34,7 +35,7 @@ def build_time(df: pd.DataFrame) -> pd.Series:
 def find_columns(df: pd.DataFrame, *patterns: str) -> list[str]:
     found: list[str] = []
     for col in df.columns:
-        low = col.lower()
+        low = ascii_fold(col)
         if all(re.search(pattern, low) for pattern in patterns):
             found.append(col)
     return found
@@ -46,6 +47,32 @@ def avg_matching(df: pd.DataFrame, *patterns: str) -> pd.Series:
     if not parts:
         return pd.Series(index=df.index, dtype="float64")
     return pd.concat(parts, axis=1).mean(axis=1)
+
+
+def best_matching(
+    df: pd.DataFrame,
+    priorities: tuple[str, ...],
+    include: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
+) -> pd.Series:
+    candidates = []
+    for col in df.columns:
+        low = ascii_fold(col)
+        if include and not all(re.search(pattern, low) for pattern in include):
+            continue
+        if any(re.search(pattern, low) for pattern in exclude):
+            continue
+        series = numeric_series(df[col])
+        if series.notna().sum() > 0:
+            candidates.append((col, low, series))
+    if not candidates:
+        return pd.Series(index=df.index, dtype="float64")
+    for priority in priorities:
+        wanted = ascii_fold(priority)
+        for _col, low, series in candidates:
+            if wanted in low:
+                return series
+    return candidates[0][2]
 
 
 def col_by_index(df: pd.DataFrame, index: int) -> pd.Series:
@@ -64,13 +91,13 @@ def avg_by_indexes(df: pd.DataFrame, indexes: list[int]) -> pd.Series:
 def build_numeric(df: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame(index=df.index)
     fallback = {
-        "CPU total %": col_by_index(df, INDEX["cpu_total_pct"]),
-        "CPU package W": col_by_index(df, INDEX["cpu_package_w"]),
-        "System total W": col_by_index(df, INDEX["system_total_w"]),
-        "CPU package C": col_by_index(df, INDEX["cpu_package_temp_c"]),
-        "GPU W": col_by_index(df, INDEX["gpu_power_w"]),
-        "GPU temp C": col_by_index(df, INDEX["gpu_temp_c"]),
-        "GPU hotspot C": col_by_index(df, INDEX["gpu_hotspot_c"]),
+        "CPU total load %": col_by_index(df, INDEX["cpu_total_pct"]),
+        "CPU package power W": col_by_index(df, INDEX["cpu_package_w"]),
+        "System total power W": col_by_index(df, INDEX["system_total_w"]),
+        "CPU package temperature C": col_by_index(df, INDEX["cpu_package_temp_c"]),
+        "GPU total power W": col_by_index(df, INDEX["gpu_power_w"]),
+        "GPU temperature C": col_by_index(df, INDEX["gpu_temp_c"]),
+        "GPU hotspot temperature C": col_by_index(df, INDEX["gpu_hotspot_c"]),
         "GPU core load %": col_by_index(df, INDEX["gpu_core_load_pct"]),
         "GPU memory use %": col_by_index(df, INDEX["gpu_mem_use_pct"]),
         "Physical memory load %": col_by_index(df, INDEX["physical_mem_load_pct"]),
@@ -81,14 +108,55 @@ def build_numeric(df: pd.DataFrame) -> pd.DataFrame:
         "E-core effective avg MHz": avg_by_indexes(df, INDEX["e_core_effective"]),
     }
     detected = {
-        "CPU total %": avg_matching(df, "cpu", "(total|load|uso|util|carga)", "(%|util)"),
-        "CPU package W": avg_matching(df, "cpu", "package", "(w|power|pot.ncia)"),
-        "System total W": avg_matching(df, "system", "(total|power|w)"),
-        "CPU package C": avg_matching(df, "cpu", "package", "(c|temp)"),
-        "GPU W": avg_matching(df, "gpu", "(power|w|pot.ncia)"),
-        "GPU temp C": avg_matching(df, "gpu", "(temp|c)"),
-        "GPU core load %": avg_matching(df, "gpu", "(core|load|util)"),
-        "GPU memory use %": avg_matching(df, "gpu", "(memory|mem.ria)", "(use|load|util)"),
+        "CPU total load %": avg_matching(df, "cpu", "(total|load|uso|util|carga)", "(%|util)"),
+        "CPU package power W": best_matching(
+            df,
+            ("consumo de energia total da cpu", "cpu package power", "cpu package w", "package power"),
+            include=("cpu|package", "w|power|potencia|energia"),
+            exclude=("ia cores|gt cores|system agent|restante|limit|limite|pl1|pl2"),
+        ),
+        "System total power W": best_matching(
+            df,
+            ("potencia total do sistema", "system total power", "total system power", "system total w"),
+            include=("sistema|system", "total|power|potencia|w"),
+            exclude=("limit|limite|pl1|pl2|agent"),
+        ),
+        "CPU package temperature C": best_matching(
+            df,
+            ("cpu package", "cpu inteira", "cpu whole", "temperaturas centrais"),
+            include=("cpu|core|centrais", r"\[c\]|temp|temperatura"),
+            exclude=("gt cores|igpu|vr vcc"),
+        ),
+        "GPU total power W": best_matching(
+            df,
+            ("gpu consumo de energia [w]", "gpu power [w]", "gpu total power", "total gpu power"),
+            include=("gpu", "w|power|potencia|energia"),
+            exclude=("linhas|fonte pp|core \\(|fbvdd|saida|tensao|voltage|limit|limite|pl1|pl2"),
+        ),
+        "GPU temperature C": best_matching(
+            df,
+            ("temperatura gpu", "gpu temperature", "gpu temp"),
+            include=("gpu", r"\[c\]|temp|temperatura"),
+            exclude=("ponto quente|hotspot|limite|limit"),
+        ),
+        "GPU hotspot temperature C": best_matching(
+            df,
+            ("temperatura de ponto quente da gpu", "gpu hotspot", "hot spot"),
+            include=("gpu", "hotspot|ponto quente|hot spot"),
+            exclude=("limite|limit"),
+        ),
+        "GPU core load %": best_matching(
+            df,
+            ("carga do nucleo da gpu", "gpu core load", "gpu load"),
+            include=("gpu", "load|carga|uso|utilizacao", "%"),
+            exclude=("d3d|video|memoria|memory|bus|barramento|vr"),
+        ),
+        "GPU memory use %": best_matching(
+            df,
+            ("uso de memoria gpu", "gpu memory use", "gpu memory load"),
+            include=("gpu", "memoria|memory", "%"),
+            exclude=("d3d|disponivel|available|alocada|allocated|dedicada|dynamic"),
+        ),
         "Physical memory load %": avg_matching(df, "(physical|f.sica)", "(memory|mem.ria)", "(load|uso|util)"),
         "Disk total activity %": avg_matching(df, "(disk|drive|ssd)", "(activity|atividade|load)"),
         "P-core clock avg MHz": avg_matching(df, "p-core", "clock"),

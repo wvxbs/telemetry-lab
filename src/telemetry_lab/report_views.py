@@ -9,14 +9,14 @@ import streamlit as st
 from telemetry_lab.analysis import stats_frame
 from telemetry_lab.metrics import (
     battery_metrics,
+    curated_power_metrics,
+    curated_temperature_metrics,
     estimated_system_power,
     fps_metrics,
     glossary_frame,
     metric_group,
     metric_label,
-    power_metrics,
     redundancy_frame,
-    temperature_metrics,
 )
 from telemetry_lab.models import Report
 
@@ -90,14 +90,14 @@ def render_power_view(reports: list[Report]) -> None:
     if not reports:
         st.info("Carregue ao menos um relatorio.")
         return
+    include_extra = st.checkbox("Mostrar sensores extras de potencia", value=False, key="power_extra_sensors")
     metrics_by_report: dict[str, list[str]] = {}
     for report in reports:
-        cols = power_metrics(list(report.numeric.columns))
         estimated = estimated_system_power(report.numeric)
         if estimated.notna().sum() > 0 and "System estimated W" not in report.numeric.columns:
             report.numeric["System estimated W"] = estimated
-            cols = ["System estimated W"] + cols
-        metrics_by_report[report.source] = cols[:12]
+        cols = curated_power_metrics(list(report.numeric.columns), include_extra=include_extra)
+        metrics_by_report[report.source] = cols
 
     data = long_metric_frame(reports, metrics_by_report)
     st.dataframe(metric_summary(reports, metrics_by_report), width="stretch", hide_index=True)
@@ -116,7 +116,10 @@ def render_temperature_view(reports: list[Report]) -> None:
     if not reports:
         st.info("Carregue ao menos um relatorio.")
         return
-    metrics_by_report = {report.source: temperature_metrics(list(report.numeric.columns))[:16] for report in reports}
+    include_extra = st.checkbox("Mostrar sensores extras de temperatura", value=False, key="temperature_extra_sensors")
+    metrics_by_report = {
+        report.source: curated_temperature_metrics(list(report.numeric.columns), include_extra=include_extra) for report in reports
+    }
     data = long_metric_frame(reports, metrics_by_report)
     st.dataframe(metric_summary(reports, metrics_by_report), width="stretch", hide_index=True)
     render_metric_chart(data)
