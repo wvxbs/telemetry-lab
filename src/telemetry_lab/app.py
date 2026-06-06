@@ -55,8 +55,8 @@ def display_report(report: Report) -> Report:
 
 
 @st.cache_data(show_spinner=False)
-def load_csv_path_cached(path: str, mtime_ns: int, size: int) -> pd.DataFrame:
-    del mtime_ns, size
+def load_csv_path_cached(path: str, mtime_ns: int, size: int, reload_token: int) -> pd.DataFrame:
+    del mtime_ns, size, reload_token
     return parse_hwinfo_csv_bytes(Path(path).read_bytes())
 
 
@@ -64,14 +64,24 @@ def make_ui_report(source: str, df: pd.DataFrame, mtime_ns: int | None = None, s
     return make_report(source, df, mtime_ns=mtime_ns, size=size, translate=tr)
 
 
+def path_reload_controls(prefix: str) -> tuple[bool, int]:
+    live = st.checkbox(tr("live_reload"), value=False, key=f"{prefix}_live")
+    token_key = f"{prefix}_reload_token"
+    if token_key not in st.session_state:
+        st.session_state[token_key] = 0
+    if st.button(tr("reload_now"), key=f"{prefix}_reload_now"):
+        st.session_state[token_key] += 1
+    if live:
+        refresh = st.number_input(tr("refresh_seconds"), min_value=2, max_value=120, value=10, key=f"{prefix}_refresh")
+        components.html(f"<meta http-equiv='refresh' content='{int(refresh)}'>", height=0)
+    return live, int(st.session_state[token_key])
+
+
 def load_report_widget(prefix: str, default_path: str = "") -> Report | None:
     upload = st.file_uploader(tr("upload_csv"), type=["csv", "CSV"], key=f"{prefix}_upload")
     with st.expander(tr("optional_path"), expanded=bool(default_path)):
         path = st.text_input(tr("csv_path"), value=default_path, help=tr("path_help"), key=f"{prefix}_path")
-        live = st.checkbox(tr("live_reload"), value=False, key=f"{prefix}_live")
-        if live:
-            refresh = st.number_input(tr("refresh_seconds"), min_value=2, max_value=120, value=10, key=f"{prefix}_refresh")
-            components.html(f"<meta http-equiv='refresh' content='{int(refresh)}'>", height=0)
+        live, reload_token = path_reload_controls(prefix)
     try:
         if upload is not None:
             data = upload.getvalue()
@@ -82,10 +92,10 @@ def load_report_widget(prefix: str, default_path: str = "") -> Report | None:
                 files = sorted(p.rglob("*.csv")) + sorted(p.rglob("*.CSV"))
                 if files:
                     chosen = st.selectbox("CSV", files, format_func=lambda item: repair_mojibake(str(item)), key=f"{prefix}_csv_select")
-                    df, mtime_ns, size = load_csv_path(str(chosen), live, load_csv_path_cached)
+                    df, mtime_ns, size = load_csv_path(str(chosen), live, load_csv_path_cached, reload_token)
                     return make_ui_report(str(chosen), df, mtime_ns, size)
             elif p.exists():
-                df, mtime_ns, size = load_csv_path(str(p), live, load_csv_path_cached)
+                df, mtime_ns, size = load_csv_path(str(p), live, load_csv_path_cached, reload_token)
                 return make_ui_report(str(p), df, mtime_ns, size)
     except Exception as exc:
         st.error(str(exc))
@@ -101,17 +111,14 @@ def load_many_reports_widget(prefix: str, default_path: str = "") -> list[Report
             reports.append(make_ui_report(upload.name, load_uploaded_csv(upload.name, data), size=len(data)))
     with st.expander(tr("optional_path"), expanded=bool(default_path)):
         paths_text = st.text_area(tr("csv_path"), value=default_path, help=tr("path_help"), key=f"{prefix}_paths")
-        live = st.checkbox(tr("live_reload"), value=False, key=f"{prefix}_live")
-        if live:
-            refresh = st.number_input(tr("refresh_seconds"), min_value=2, max_value=120, value=10, key=f"{prefix}_refresh")
-            components.html(f"<meta http-equiv='refresh' content='{int(refresh)}'>", height=0)
+        live, reload_token = path_reload_controls(prefix)
         for raw_path in [line.strip() for line in paths_text.splitlines() if line.strip()]:
             try:
                 p = Path(raw_path).expanduser()
                 files = sorted(p.rglob("*.csv")) + sorted(p.rglob("*.CSV")) if p.is_dir() else [p]
                 for file in files:
                     if file.exists():
-                        df, mtime_ns, size = load_csv_path(str(file), live, load_csv_path_cached)
+                        df, mtime_ns, size = load_csv_path(str(file), live, load_csv_path_cached, reload_token)
                         reports.append(make_ui_report(str(file), df, mtime_ns, size))
             except Exception as exc:
                 st.error(f"{raw_path}: {exc}")

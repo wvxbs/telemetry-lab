@@ -55,6 +55,7 @@ Em vez de abrir um CSV e procurar significado no caos, voce sobe o relatorio e t
 - Link benchmark records to the telemetry report captured during the same run.
 - Compare two telemetry reports side by side.
 - Build custom charts with line, area, scatter, bar, heatmap, and table modes.
+- Manually reread typed CSV paths while a log is still growing.
 - Enable live reload for CSV files that are still being written, when using a typed path accessible to the app.
 
 The app is in Portuguese by default and includes an English switch in the sidebar.

@@ -73,13 +73,13 @@ def parse_hwinfo_csv_bytes(data: bytes) -> pd.DataFrame:
     return df
 
 
-def load_csv_path(path: str, live_reload: bool, cache_reader) -> tuple[pd.DataFrame, int, int]:
+def load_csv_path(path: str, live_reload: bool, cache_reader, reload_token: int = 0) -> tuple[pd.DataFrame, int, int]:
     p = Path(path).expanduser()
     stat = p.stat()
     if live_reload:
         df = parse_hwinfo_csv_bytes(p.read_bytes())
     else:
-        df = cache_reader(str(p), stat.st_mtime_ns, stat.st_size)
+        df = cache_reader(str(p), stat.st_mtime_ns, stat.st_size, reload_token)
     return df, stat.st_mtime_ns, stat.st_size
 
 
