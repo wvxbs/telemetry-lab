@@ -77,6 +77,12 @@ def path_reload_controls(prefix: str) -> tuple[bool, int]:
     return live, int(st.session_state[token_key])
 
 
+def sync_selected_csv_path(prefix: str) -> None:
+    selected = st.session_state.get(f"{prefix}_csv_select")
+    if selected:
+        st.session_state[f"{prefix}_path"] = str(selected)
+
+
 def load_report_widget(prefix: str, default_path: str = "") -> Report | None:
     upload = st.file_uploader(tr("upload_csv"), type=["csv", "CSV"], key=f"{prefix}_upload")
     with st.expander(tr("optional_path"), expanded=bool(default_path)):
@@ -91,10 +97,19 @@ def load_report_widget(prefix: str, default_path: str = "") -> Report | None:
             if p.is_dir():
                 files = sorted(p.rglob("*.csv")) + sorted(p.rglob("*.CSV"))
                 if files:
-                    chosen = st.selectbox("CSV", files, format_func=lambda item: repair_mojibake(str(item)), key=f"{prefix}_csv_select")
+                    chosen = st.selectbox(
+                        "CSV",
+                        files,
+                        format_func=lambda item: repair_mojibake(str(item)),
+                        key=f"{prefix}_csv_select",
+                        on_change=sync_selected_csv_path,
+                        args=(prefix,),
+                    )
+                    st.caption(f"{tr('dynamic_path_active')}: {repair_mojibake(str(chosen))}")
                     df, mtime_ns, size = load_csv_path(str(chosen), live, load_csv_path_cached, reload_token)
                     return make_ui_report(str(chosen), df, mtime_ns, size)
             elif p.exists():
+                st.caption(f"{tr('dynamic_path_active')}: {repair_mojibake(str(p))}")
                 df, mtime_ns, size = load_csv_path(str(p), live, load_csv_path_cached, reload_token)
                 return make_ui_report(str(p), df, mtime_ns, size)
     except Exception as exc:

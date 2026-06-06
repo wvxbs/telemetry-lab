@@ -73,6 +73,8 @@ Use the browser to manage files:
 
 The optional typed path input exists for advanced cases only. It only works for paths the app process can see. In Docker, that means a bind mount you configured yourself. For ordinary user-selected files, use browser upload.
 
+When the path field points to a readable folder, choosing a CSV from the in-app selector also fills the active dynamic path used by manual rereads and live reload.
+
 ## Optional File Naming Convention
 
 Telemetry Lab does not require a specific CSV file name. The app should still work when the user opens any HWiNFO64 CSV through the browser picker or types a readable path.
