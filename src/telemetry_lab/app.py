@@ -458,6 +458,10 @@ def main() -> None:
         st.header(tr("input"))
         report = load_report_widget("main", default_report_path())
         st.caption(f"Telemetry Lab {APP_VERSION}")
+        with st.expander(tr("legal")):
+            st.caption("Copyright (C) 2026 Gabriel Ferreira")
+            st.caption(tr("license_notice"))
+            st.caption(tr("source_notice"))
     st.title(tr("page"))
     st.caption(tr("tagline"))
 

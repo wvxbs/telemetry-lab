@@ -172,6 +172,8 @@ Use the Benchmarks tab to create, download, save through Chrome/Edge's directory
 
 This project is licensed under the GNU General Public License v3.0 or later (GPL-3.0-or-later). See [LICENSE](LICENSE) for details.
 
+Docker images include the project license and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). If you redistribute modified versions of this app or its image, keep the GPL-3.0-or-later terms, preserve notices, and make the corresponding source available.
+
 Copyright (C) 2026 Gabriel Ferreira.
 
 ## Author And Contact

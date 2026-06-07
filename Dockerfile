@@ -1,5 +1,11 @@
 FROM python:3.12-slim
 
+LABEL org.opencontainers.image.title="Telemetry Lab" \
+    org.opencontainers.image.description="Interactive HWiNFO telemetry dashboard" \
+    org.opencontainers.image.source="https://github.com/wvxbs/telemetry-lab" \
+    org.opencontainers.image.licenses="GPL-3.0-or-later" \
+    org.opencontainers.image.authors="Gabriel Ferreira <gabriel.ferreira7854@gmail.com>"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -13,6 +19,7 @@ COPY requirements.txt ./
 RUN pip install --upgrade pip \
     && pip install -r requirements.txt
 
+COPY LICENSE THIRD_PARTY_NOTICES.md ./
 COPY app.py ./
 COPY src ./src
 

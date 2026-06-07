@@ -53,6 +53,9 @@ TEXT = {
         "temperature_unit": "Temperatura",
         "celsius": "Celsius",
         "fahrenheit": "Fahrenheit",
+        "legal": "Legal",
+        "license_notice": "Licenciado sob GPL-3.0-or-later. Sem garantia.",
+        "source_notice": "Fonte e licenca completas no repositorio do projeto.",
     },
     "en": {
         "page": "Telemetry Lab",
@@ -104,6 +107,9 @@ TEXT = {
         "temperature_unit": "Temperature",
         "celsius": "Celsius",
         "fahrenheit": "Fahrenheit",
+        "legal": "Legal",
+        "license_notice": "Licensed under GPL-3.0-or-later. No warranty.",
+        "source_notice": "Complete source and license are in the project repository.",
     },
 }
 
