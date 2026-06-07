@@ -157,6 +157,10 @@ streamlit run app.py
 
 When running directly on the machine, typed paths are normal local paths available to your user. Browser upload/download still works the same way.
 
+## Architecture
+
+The Streamlit layer is treated as the frontend: it owns widgets, session state, navigation, and rendering. The reusable application logic lives under `src/telemetry_lab`, with `report_service.py` acting as the boundary for loading CSV input, building reports, listing readable CSV files, and adapting reports for display units.
+
 ## Benchmark Records
 
 Benchmark records are saved as `*.telemetry-benchmark.json` files. Each file stores:

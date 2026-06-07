@@ -14,11 +14,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from telemetry_lab import APP_VERSION
-from telemetry_lab.analysis import make_report, stats_frame, yes_count
+from telemetry_lab.analysis import stats_frame, yes_count
 from telemetry_lab.benchmark_records import benchmark_payload
 from telemetry_lab.charts import render_chart
 from telemetry_lab.config import INDEX, default_report_path
-from telemetry_lab.csv_io import load_csv_path, load_uploaded_csv, parse_hwinfo_csv_bytes
+from telemetry_lab.csv_io import parse_hwinfo_csv_bytes
 from telemetry_lab.i18n import translate
 from telemetry_lab.metrics import (
     curated_power_metrics,
@@ -28,9 +28,16 @@ from telemetry_lab.metrics import (
     metric_options_for_query,
 )
 from telemetry_lab.models import Report
+from telemetry_lab.report_service import (
+    build_path_report,
+    build_path_reports,
+    build_uploaded_report,
+    csv_files_in_path,
+    report_for_temperature_unit,
+)
 from telemetry_lab.report_views import render_fps_view, render_glossary_view, render_power_view, render_temperature_view
 from telemetry_lab.text_utils import category_for_metric, pretty_token, repair_mojibake, slugify
-from telemetry_lab.units import display_numeric_frame, normalize_temperature_unit
+from telemetry_lab.units import normalize_temperature_unit
 
 
 def tr(key: str) -> str:
@@ -43,25 +50,13 @@ def selected_temperature_unit() -> str:
 
 
 def display_report(report: Report) -> Report:
-    return Report(
-        source=report.source,
-        df=report.df,
-        time=report.time,
-        numeric=display_numeric_frame(report.numeric, selected_temperature_unit()),
-        context=report.context,
-        mtime_ns=report.mtime_ns,
-        size=report.size,
-    )
+    return report_for_temperature_unit(report, selected_temperature_unit())
 
 
 @st.cache_data(show_spinner=False)
 def load_csv_path_cached(path: str, mtime_ns: int, size: int, reload_token: int) -> pd.DataFrame:
     del mtime_ns, size, reload_token
     return parse_hwinfo_csv_bytes(Path(path).read_bytes())
-
-
-def make_ui_report(source: str, df: pd.DataFrame, mtime_ns: int | None = None, size: int | None = None) -> Report:
-    return make_report(source, df, mtime_ns=mtime_ns, size=size, translate=tr)
 
 
 def path_reload_controls(prefix: str) -> tuple[bool, int]:
@@ -91,11 +86,11 @@ def load_report_widget(prefix: str, default_path: str = "") -> Report | None:
     try:
         if upload is not None:
             data = upload.getvalue()
-            return make_ui_report(upload.name, load_uploaded_csv(upload.name, data), size=len(data))
+            return build_uploaded_report(upload.name, data, tr)
         if path.strip():
             p = Path(path).expanduser()
             if p.is_dir():
-                files = sorted(p.rglob("*.csv")) + sorted(p.rglob("*.CSV"))
+                files = csv_files_in_path(p)
                 if files:
                     chosen = st.selectbox(
                         "CSV",
@@ -106,12 +101,10 @@ def load_report_widget(prefix: str, default_path: str = "") -> Report | None:
                         args=(prefix,),
                     )
                     st.caption(f"{tr('dynamic_path_active')}: {repair_mojibake(str(chosen))}")
-                    df, mtime_ns, size = load_csv_path(str(chosen), live, load_csv_path_cached, reload_token)
-                    return make_ui_report(str(chosen), df, mtime_ns, size)
+                    return build_path_report(chosen, live, load_csv_path_cached, reload_token, tr)
             elif p.exists():
                 st.caption(f"{tr('dynamic_path_active')}: {repair_mojibake(str(p))}")
-                df, mtime_ns, size = load_csv_path(str(p), live, load_csv_path_cached, reload_token)
-                return make_ui_report(str(p), df, mtime_ns, size)
+                return build_path_report(p, live, load_csv_path_cached, reload_token, tr)
     except Exception as exc:
         st.error(str(exc))
     return None
@@ -123,18 +116,13 @@ def load_many_reports_widget(prefix: str, default_path: str = "") -> list[Report
     if uploads:
         for upload in uploads:
             data = upload.getvalue()
-            reports.append(make_ui_report(upload.name, load_uploaded_csv(upload.name, data), size=len(data)))
+            reports.append(build_uploaded_report(upload.name, data, tr))
     with st.expander(tr("optional_path"), expanded=bool(default_path)):
         paths_text = st.text_area(tr("csv_path"), value=default_path, help=tr("path_help"), key=f"{prefix}_paths")
         live, reload_token = path_reload_controls(prefix)
         for raw_path in [line.strip() for line in paths_text.splitlines() if line.strip()]:
             try:
-                p = Path(raw_path).expanduser()
-                files = sorted(p.rglob("*.csv")) + sorted(p.rglob("*.CSV")) if p.is_dir() else [p]
-                for file in files:
-                    if file.exists():
-                        df, mtime_ns, size = load_csv_path(str(file), live, load_csv_path_cached, reload_token)
-                        reports.append(make_ui_report(str(file), df, mtime_ns, size))
+                reports.extend(build_path_reports([raw_path], live, load_csv_path_cached, reload_token, tr))
             except Exception as exc:
                 st.error(f"{raw_path}: {exc}")
     return reports
