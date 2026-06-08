@@ -130,6 +130,14 @@ tools/win-x64/TelemetryLab.WinUI-win-x64.zip
 
 Extract that zip on Windows and run `TelemetryLab.WinUI.exe`.
 
+To install it like a normal per-user Windows app, run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+This copies the app to `%LOCALAPPDATA%\Programs\Telemetry Lab`, creates a Start Menu shortcut, registers `TelemetryLab.WinUI.exe` for Explorer/Win+R through App Paths, and adds an uninstall entry under Windows installed apps. Use `.\install.ps1 -CreateDesktopShortcut` if you also want a desktop shortcut.
+
 ## Optional Mounted Reports
 
 Mounting reports is optional. Use it only for very large files, repeated comparisons, or live reload from a CSV that is still being written.

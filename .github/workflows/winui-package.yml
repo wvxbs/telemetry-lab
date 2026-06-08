@@ -51,6 +51,11 @@ jobs:
       - name: Create app zip
         shell: pwsh
         run: |
+          Copy-Item `
+            -LiteralPath "winui\TelemetryLab.WinUI\Packaging\install.ps1", "winui\TelemetryLab.WinUI\Packaging\uninstall.ps1" `
+            -Destination "${env:RUNNER_TEMP}\telemetry-lab-winui" `
+            -Force
+
           $zipPath = "${env:RUNNER_TEMP}\TelemetryLab.WinUI-win-x64.zip"
           if (Test-Path -LiteralPath $zipPath) {
             Remove-Item -LiteralPath $zipPath -Force
