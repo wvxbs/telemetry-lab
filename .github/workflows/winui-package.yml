@@ -1,0 +1,116 @@
+name: Publish WinUI package
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  package:
+    name: Build and publish WinUI package
+    runs-on: windows-latest
+
+    env:
+      PROJECT_PATH: winui/TelemetryLab.WinUI/TelemetryLab.WinUI.csproj
+      PACKAGE_ID: TelemetryLab.WinUI
+      PACKAGE_VERSION: 0.1.${{ github.run_number }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set up NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore
+        run: dotnet restore "${{ env.PROJECT_PATH }}"
+
+      - name: Build
+        run: dotnet build "${{ env.PROJECT_PATH }}" --configuration Release --no-restore -p:Platform=x64
+
+      - name: Publish self-contained app
+        shell: pwsh
+        run: |
+          dotnet publish "${env:PROJECT_PATH}" `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            -p:WindowsPackageType=None `
+            --output "${env:RUNNER_TEMP}\telemetry-lab-winui"
+
+      - name: Create app zip
+        shell: pwsh
+        run: |
+          $zipPath = "${env:RUNNER_TEMP}\TelemetryLab.WinUI-win-x64.zip"
+          if (Test-Path -LiteralPath $zipPath) {
+            Remove-Item -LiteralPath $zipPath -Force
+          }
+          Compress-Archive `
+            -Path "${env:RUNNER_TEMP}\telemetry-lab-winui\*" `
+            -DestinationPath $zipPath `
+            -CompressionLevel Optimal
+          "APP_ZIP=$zipPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Create NuGet package for GitHub Packages
+        shell: pwsh
+        run: |
+          $packageRoot = "${env:RUNNER_TEMP}\github-package"
+          $toolsRoot = Join-Path $packageRoot "tools\win-x64"
+          New-Item -ItemType Directory -Force -Path $toolsRoot | Out-Null
+          Copy-Item -LiteralPath "${env:APP_ZIP}" -Destination (Join-Path $toolsRoot "TelemetryLab.WinUI-win-x64.zip")
+
+          $repositoryUrl = "https://github.com/${{ github.repository }}"
+          $nuspec = @"
+          <package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+            <metadata>
+              <id>${env:PACKAGE_ID}</id>
+              <version>${env:PACKAGE_VERSION}</version>
+              <authors>Gabriel Ferreira</authors>
+              <owners>wvxbs</owners>
+              <license type="expression">GPL-3.0-or-later</license>
+              <projectUrl>$repositoryUrl</projectUrl>
+              <repository type="git" url="$repositoryUrl" commit="${{ github.sha }}" />
+              <description>Telemetry Lab WinUI 3 native Windows app package. The self-contained win-x64 app zip is stored under tools/win-x64.</description>
+            </metadata>
+            <files>
+              <file src="tools\win-x64\TelemetryLab.WinUI-win-x64.zip" target="tools\win-x64" />
+            </files>
+          </package>
+          "@
+          $nuspecPath = Join-Path $packageRoot "${env:PACKAGE_ID}.nuspec"
+          $nuspec | Set-Content -LiteralPath $nuspecPath -Encoding UTF8
+
+          nuget pack $nuspecPath `
+            -OutputDirectory "${env:RUNNER_TEMP}\nupkg" `
+            -BasePath $packageRoot `
+            -NoDefaultExcludes
+
+          $packagePath = Get-ChildItem -LiteralPath "${env:RUNNER_TEMP}\nupkg" -Filter "*.nupkg" | Select-Object -First 1
+          if (-not $packagePath) {
+            throw "NuGet package was not created."
+          }
+          "PACKAGE_PATH=$($packagePath.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelemetryLab.WinUI-win-x64
+          path: ${{ env.APP_ZIP }}
+          if-no-files-found: error
+
+      - name: Publish to GitHub Packages
+        run: >
+          dotnet nuget push "${{ env.PACKAGE_PATH }}"
+          --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+          --api-key "${{ secrets.GITHUB_TOKEN }}"
+          --skip-duplicate

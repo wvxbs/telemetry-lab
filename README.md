@@ -118,6 +118,18 @@ Open the dashboard at <http://localhost:8501>. Choose the CSV in the browser, th
 
 No volume is required for normal use.
 
+## Windows App Package
+
+The native WinUI 3 app is published to GitHub Packages on every commit to `main`.
+
+Open the repository page on GitHub, go to **Packages**, and download the latest `TelemetryLab.WinUI` NuGet package. The package is a distribution carrier, not a library: open or extract the `.nupkg` file as a zip and use the app bundle at:
+
+```text
+tools/win-x64/TelemetryLab.WinUI-win-x64.zip
+```
+
+Extract that zip on Windows and run `TelemetryLab.WinUI.exe`.
+
 ## Optional Mounted Reports
 
 Mounting reports is optional. Use it only for very large files, repeated comparisons, or live reload from a CSV that is still being written.
