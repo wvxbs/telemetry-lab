@@ -10,6 +10,7 @@ using TelemetryLab.WinUI.Telemetry;
 using Windows.Graphics;
 using Windows.Storage.Pickers;
 using Windows.UI;
+using Windows.UI.ViewManagement;
 using WinRT.Interop;
 
 namespace TelemetryLab.WinUI;
@@ -113,7 +114,7 @@ public sealed partial class MainWindow : Window
             Width = 16,
             Height = 16,
             CornerRadius = new CornerRadius(4),
-            Background = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0x78, 0xD4)),
+            Background = AccentBrush(),
             VerticalAlignment = VerticalAlignment.Center,
             Child = new FontIcon
             {
@@ -143,8 +144,8 @@ public sealed partial class MainWindow : Window
             Spacing = 14,
             Padding = new Thickness(16, 14, 14, 18),
             Background = new SolidColorBrush(IsLightTheme
-                ? Color.FromArgb(0x72, 0xF4, 0xEE, 0xE6)
-                : Color.FromArgb(0x78, 0x20, 0x20, 0x20))
+                ? Color.FromArgb(0x58, 0xFF, 0xFF, 0xFF)
+                : Color.FromArgb(0x46, 0x18, 0x18, 0x18))
         };
 
         side.Children.Add(new TextBlock
@@ -307,7 +308,7 @@ public sealed partial class MainWindow : Window
 
     private UIElement BuildOverviewSection()
     {
-        var panel = BuildCardStack("Visao geral", "Resumo curado das familias principais.");
+        var panel = BuildCardStack("Visão geral", "Resumo curado das famílias principais.");
         panel.Children.Add(BuildMetricTable(_report.Summaries.Take(10)));
         var first = _report.Summaries.FirstOrDefault();
         if (first is not null)
@@ -324,7 +325,7 @@ public sealed partial class MainWindow : Window
         var panel = BuildCardStack(group, subtitle);
         if (metrics.Count == 0)
         {
-            panel.Children.Add(new TextBlock { Text = "Nenhuma metrica compativel foi detectada.", Opacity = 0.72 });
+            panel.Children.Add(new TextBlock { Text = "Nenhuma métrica compatível foi detectada.", Opacity = 0.72 });
         }
         else
         {
@@ -337,7 +338,7 @@ public sealed partial class MainWindow : Window
 
     private UIElement BuildDataSection()
     {
-        var panel = BuildCardStack("Dados", "Colunas numericas e grupos detectados.");
+        var panel = BuildCardStack("Dados", "Colunas numéricas e grupos detectados.");
         panel.Children.Add(BuildMetricTable(_report.Summaries.Take(28)));
         return BuildCard(panel);
     }
@@ -356,7 +357,7 @@ public sealed partial class MainWindow : Window
 
     private static UIElement BuildMetricHeader()
     {
-        return BuildGridRow(["Metrica", "Grupo", "Media", "P95", "Max"], true);
+        return BuildGridRow(["Métrica", "Grupo", "Média", "P95", "Max"], true);
     }
 
     private static UIElement BuildMetricRow(MetricSummary metric)
@@ -377,7 +378,7 @@ public sealed partial class MainWindow : Window
             MinHeight = header ? 34 : 38,
             Padding = new Thickness(8, 4, 8, 4),
             ColumnSpacing = 10,
-            Background = header ? new SolidColorBrush(Color.FromArgb(0x16, 0x80, 0x80, 0x80)) : TransparentBrush(),
+            Background = header ? LayerBrush(0x20) : TransparentBrush(),
             CornerRadius = new CornerRadius(header ? 6 : 0)
         };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2.7, GridUnitType.Star) });
@@ -413,7 +414,7 @@ public sealed partial class MainWindow : Window
         {
             Height = 220,
             MinWidth = 600,
-            Background = new SolidColorBrush(IsLightTheme ? Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x38, 0x10, 0x10, 0x10))
+            Background = LayerBrush(IsLightTheme ? (byte)0x50 : (byte)0x34)
         };
         canvas.Loaded += (_, _) => DrawChart(canvas, values);
         canvas.SizeChanged += (_, _) => DrawChart(canvas, values);
@@ -457,7 +458,7 @@ public sealed partial class MainWindow : Window
         {
             Points = points,
             StrokeThickness = 2.4,
-            Stroke = new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0x78, 0xD4))
+            Stroke = AccentBrush()
         });
     }
 
@@ -489,8 +490,8 @@ public sealed partial class MainWindow : Window
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(padding),
             Background = new SolidColorBrush(IsLightTheme
-                ? Color.FromArgb(0xC4, 0xFF, 0xFF, 0xFF)
-                : Color.FromArgb(0xC0, 0x2C, 0x2C, 0x2C)),
+                ? Color.FromArgb(0xA8, 0xFF, 0xFF, 0xFF)
+                : Color.FromArgb(0x88, 0x2A, 0x2A, 0x2A)),
             BorderBrush = SubtleBorderBrush(),
             Child = content
         };
@@ -527,9 +528,7 @@ public sealed partial class MainWindow : Window
             Padding = new Thickness(10, 0, 10, 0),
             MinHeight = 38,
             CornerRadius = new CornerRadius(6),
-            Background = selected
-                ? new SolidColorBrush(IsLightTheme ? Color.FromArgb(0x84, 0xEA, 0xE3, 0xDC) : Color.FromArgb(0x72, 0x3B, 0x3B, 0x3B))
-                : TransparentBrush(),
+            Background = selected ? AccentLayerBrush(IsLightTheme ? (byte)0x24 : (byte)0x36) : TransparentBrush(),
             BorderBrush = TransparentBrush(),
             Content = new StackPanel
             {
@@ -537,7 +536,7 @@ public sealed partial class MainWindow : Window
                 Spacing = 12,
                 Children =
                 {
-                    new FontIcon { Glyph = glyph, FontSize = 16, Foreground = selected ? new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0x78, 0xD4)) : null },
+                    new FontIcon { Glyph = glyph, FontSize = 16, Foreground = selected ? AccentBrush() : null },
                     new TextBlock { Text = text, FontSize = 13, VerticalAlignment = VerticalAlignment.Center }
                 }
             }
@@ -650,13 +649,13 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            SystemBackdrop = new MicaBackdrop();
+            SystemBackdrop = new DesktopAcrylicBackdrop();
         }
         catch
         {
             try
             {
-                SystemBackdrop = new DesktopAcrylicBackdrop();
+                SystemBackdrop = new MicaBackdrop();
             }
             catch
             {
@@ -682,21 +681,21 @@ public sealed partial class MainWindow : Window
         {
             StatusKind.Success => Color.FromArgb(0xFF, 0x0E, 0x7A, 0x0D),
             StatusKind.Error => Color.FromArgb(0xFF, 0xC4, 0x2B, 0x1C),
-            _ => Color.FromArgb(0xFF, 0x00, 0x78, 0xD4)
+            _ => AccentColor()
         });
         StatusPanel.Background = new SolidColorBrush(kind switch
         {
             StatusKind.Success => Color.FromArgb(0x24, 0x10, 0x7C, 0x10),
             StatusKind.Error => Color.FromArgb(0x24, 0xC4, 0x2B, 0x1C),
-            _ => Color.FromArgb(0x22, 0x00, 0x78, 0xD4)
+            _ => WithAlpha(AccentColor(), 0x2A)
         });
     }
 
     private static SolidColorBrush ResolvePageBackground()
     {
         return new SolidColorBrush(IsLightTheme
-            ? Color.FromArgb(0xE8, 0xF8, 0xF4, 0xEF)
-            : Color.FromArgb(0xE8, 0x20, 0x20, 0x20));
+            ? Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x18, 0x00, 0x00, 0x00));
     }
 
     private static SolidColorBrush SubtleBorderBrush()
@@ -707,6 +706,34 @@ public sealed partial class MainWindow : Window
     }
 
     private static SolidColorBrush TransparentBrush() => new(Color.FromArgb(0x00, 0x00, 0x00, 0x00));
+
+    private static SolidColorBrush AccentBrush() => new(AccentColor());
+
+    private static SolidColorBrush AccentLayerBrush(byte alpha) => new(WithAlpha(AccentColor(), alpha));
+
+    private static SolidColorBrush LayerBrush(byte alpha)
+    {
+        return new SolidColorBrush(IsLightTheme
+            ? Color.FromArgb(alpha, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(alpha, 0x00, 0x00, 0x00));
+    }
+
+    private static Color AccentColor()
+    {
+        try
+        {
+            return new UISettings().GetColorValue(UIColorType.Accent);
+        }
+        catch
+        {
+            return Color.FromArgb(0xFF, 0x00, 0x78, 0xD4);
+        }
+    }
+
+    private static Color WithAlpha(Color color, byte alpha)
+    {
+        return Color.FromArgb(alpha, color.R, color.G, color.B);
+    }
 
     private static bool IsLightTheme
     {
