@@ -2,3 +2,6 @@
 __pycache__/
 *.py[cod]
 *.log
+artifacts/
+winui/**/bin/
+winui/**/obj/
