@@ -1221,6 +1221,11 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
+        if (low.Contains("clock") || low.Contains("relogio") || low.Contains("frequencia") || low.Contains("mhz") || low.Contains("ghz"))
+        {
+            return false;
+        }
+
         return low.Contains("vram") ||
             low.Contains("memoria gpu") ||
             low.Contains("gpu memory") ||
@@ -1232,8 +1237,14 @@ public sealed partial class MainWindow : Window
     private static bool IsRamMetric(MetricSummary metric)
     {
         var low = CsvTelemetryService.Fold(metric.Name);
+        if (IsUnavailableMemoryMetric(metric.Name))
+        {
+            return false;
+        }
+
+        var hasRamTerm = low == "ram" || low.StartsWith("ram ") || low.Contains(" ram ") || low.Contains("[ram]");
         return metric.Group == "Memoria" && !IsVramMetric(metric) &&
-            (low.Contains("memoria fisica") || low.Contains("physical memory") || low.Contains("ram") || low.Contains("memory load") || low.Contains("carga da memoria"));
+            (hasRamTerm || low.Contains("memoria fisica") || low.Contains("physical memory") || low.Contains("memory load") || low.Contains("carga da memoria"));
     }
 
     private static bool IsMemoryTemperatureMetric(MetricSummary metric)
