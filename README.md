@@ -132,7 +132,9 @@ tools/win-x64/TelemetryLab.WinUI-win-x64.zip
 
 Extract that zip on Windows and run `TelemetryLab.WinUI.exe`.
 
-To install it like a normal per-user Windows app, run:
+You can keep using the extracted folder as a portable tool. To install it like a normal per-user Windows app, open the native app and use the **Installation** / **Instalação** page. It exposes the same per-user install, update, repair, and uninstall flow used by the package scripts.
+
+If you prefer the terminal, run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1

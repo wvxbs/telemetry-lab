@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Gabriel Ferreira
+using System.Diagnostics;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -49,6 +50,7 @@ public sealed partial class MainWindow : Window
     private TextBlock StatusText = null!;
     private FontIcon StatusIcon = null!;
     private Border StatusPanel = null!;
+    private TextBlock InstallStateText = null!;
 
     public MainWindow()
     {
@@ -216,6 +218,7 @@ public sealed partial class MainWindow : Window
         side.Children.Add(BuildNavItem("\uE8A7", "Dados", T("data")));
         side.Children.Add(BuildNavItem("\uE8A5", "Gráfico", T("custom_chart")));
         side.Children.Add(BuildNavItem("\uE8FD", "Glossário", T("glossary")));
+        side.Children.Add(BuildNavItem("\uE896", "Instalação", T("install")));
 
         side.Children.Add(new Border { Height = 1, Background = SubtleBorderBrush(), Margin = new Thickness(0, 4, 0, 0) });
         side.Children.Add(BuildSettingCombo(T("language"), _language, ["pt", "en"], value => value == "pt" ? "Português" : "English", value =>
@@ -329,6 +332,9 @@ public sealed partial class MainWindow : Window
                 break;
             case "Glossário":
                 MainSurface.Children.Add(BuildGlossarySection());
+                break;
+            case "Instalação":
+                MainSurface.Children.Add(BuildInstallSection());
                 break;
             case "Dados":
                 MainSurface.Children.Add(BuildDataSection());
@@ -898,6 +904,7 @@ public sealed partial class MainWindow : Window
             "data" => "Data",
             "custom_chart" => "Custom chart",
             "glossary" => "Glossary",
+            "install" => "Installation",
             "language" => "Language",
             "temperature_unit" => "Temperature",
             "celsius" => "Celsius",
@@ -928,6 +935,18 @@ public sealed partial class MainWindow : Window
             "compare_empty" => "Choose a second report to compare averages, P95 values, and deltas.",
             "current" => "Current",
             "glossary_subtitle" => "Meaning and grouping inferred for every numeric sensor.",
+            "install_subtitle" => "Install, update, repair, or remove the native Windows app without losing the portable option.",
+            "install_state_installed_running" => "Telemetry Lab is installed and this window is running from:",
+            "install_state_installed" => "Telemetry Lab is installed at:",
+            "install_state_portable" => "Telemetry Lab is running in portable mode. You can keep using it this way or install it for Start Menu, Explorer, Win+R, and Windows installed apps integration.",
+            "install_help" => "The installer is per-user and uses the same files shipped in this package. Portable use remains supported: just run the executable from the extracted folder.",
+            "install_action" => "Install",
+            "update_action" => "Update",
+            "repair_action" => "Repair",
+            "uninstall_action" => "Uninstall",
+            "done" => "Done",
+            "running" => "Running",
+            "install_process_error" => "Could not start the installer process.",
             "data_subtitle" => "Numeric columns and detected groups.",
             "no_metric" => "No compatible metric was detected.",
             "no_fps" => "No FPS metric was detected. HWiNFO may need RTSS, PresentMon, or another frame source.",
@@ -972,6 +991,7 @@ public sealed partial class MainWindow : Window
             "data" => "Dados",
             "custom_chart" => "Gráfico",
             "glossary" => "Glossário",
+            "install" => "Instalação",
             "language" => "Idioma",
             "temperature_unit" => "Temperatura",
             "celsius" => "Celsius",
@@ -1002,6 +1022,18 @@ public sealed partial class MainWindow : Window
             "compare_empty" => "Escolha um segundo relatório para comparar médias, P95 e deltas.",
             "current" => "Atual",
             "glossary_subtitle" => "Significado e agrupamento inferidos para cada sensor numérico.",
+            "install_subtitle" => "Instale, atualize, repare ou remova o app nativo sem perder a opção portátil.",
+            "install_state_installed_running" => "O Telemetry Lab está instalado e esta janela está rodando de:",
+            "install_state_installed" => "O Telemetry Lab está instalado em:",
+            "install_state_portable" => "O Telemetry Lab está rodando em modo portátil. Você pode continuar usando assim ou instalar para integrar ao Menu Iniciar, Explorer, Win+R e apps instalados do Windows.",
+            "install_help" => "A instalação é por usuário e usa os mesmos arquivos enviados neste pacote. O modo portátil continua suportado: basta executar o .exe da pasta extraída.",
+            "install_action" => "Instalar",
+            "update_action" => "Atualizar",
+            "repair_action" => "Reparar",
+            "uninstall_action" => "Desinstalar",
+            "done" => "Concluído",
+            "running" => "Executando",
+            "install_process_error" => "Não foi possível iniciar o processo de instalação.",
             "data_subtitle" => "Colunas numéricas e grupos detectados.",
             "no_metric" => "Nenhuma métrica compatível foi detectada.",
             "no_fps" => "Nenhuma métrica de FPS foi detectada. O HWiNFO pode precisar de RTSS, PresentMon ou outra fonte de quadros.",
@@ -1183,6 +1215,154 @@ public sealed partial class MainWindow : Window
         });
         panel.Children.Add(BuildSimpleTable([T("metric"), T("group"), T("description"), "N"], rows));
         return BuildCard(panel);
+    }
+
+    private UIElement BuildInstallSection()
+    {
+        var panel = BuildCardStack(T("install"), T("install_subtitle"));
+        InstallStateText = new TextBlock
+        {
+            Text = GetInstallStateText(),
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.84
+        };
+        panel.Children.Add(BuildInstallStateRow());
+
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8
+        };
+        actions.Children.Add(BuildActionButton("\uE896", T("install_action"), async (_, _) =>
+            await RunPackageScriptAsync("install.ps1", [ "-CreateDesktopShortcut" ], T("install_action")), primary: true));
+        actions.Children.Add(BuildActionButton("\uE895", T("update_action"), async (_, _) =>
+            await RunPackageScriptAsync("install.ps1", [ "-CreateDesktopShortcut" ], T("update_action"))));
+        actions.Children.Add(BuildActionButton("\uE90F", T("repair_action"), async (_, _) =>
+            await RunPackageScriptAsync("install.ps1", [ "-CreateDesktopShortcut" ], T("repair_action"))));
+        actions.Children.Add(BuildActionButton("\uE74D", T("uninstall_action"), async (_, _) =>
+            await RunPackageScriptAsync("uninstall.ps1", IsRunningFromInstallDir() ? [ "-StopRunning" ] : [], T("uninstall_action"))));
+        panel.Children.Add(actions);
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = T("install_help"),
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12,
+            Opacity = 0.66
+        });
+        return BuildCard(panel);
+    }
+
+    private UIElement BuildInstallStateRow()
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 10,
+            Padding = new Thickness(0, 2, 0, 4)
+        };
+        row.Children.Add(new FontIcon
+        {
+            Glyph = File.Exists(GetInstalledExePath()) ? "\uE930" : "\uE7B8",
+            FontSize = 18,
+            Foreground = AccentBrush()
+        });
+        row.Children.Add(InstallStateText);
+        return row;
+    }
+
+    private string GetInstallStateText()
+    {
+        var installDir = GetInstallDir();
+        if (File.Exists(GetInstalledExePath()) && IsRunningFromInstallDir())
+        {
+            return $"{T("install_state_installed_running")} {installDir}";
+        }
+
+        if (File.Exists(GetInstalledExePath()))
+        {
+            return $"{T("install_state_installed")} {installDir}";
+        }
+
+        return T("install_state_portable");
+    }
+
+    private async Task RunPackageScriptAsync(string scriptName, string[] arguments, string actionName)
+    {
+        var scriptPath = System.IO.Path.Combine(AppContext.BaseDirectory, scriptName);
+        if (!File.Exists(scriptPath))
+        {
+            SetStatus(T("not_found"), scriptPath, StatusKind.Error);
+            return;
+        }
+
+        try
+        {
+            SetStatus(actionName, T("running"), StatusKind.Info);
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            startInfo.ArgumentList.Add("-NoProfile");
+            startInfo.ArgumentList.Add("-ExecutionPolicy");
+            startInfo.ArgumentList.Add("Bypass");
+            startInfo.ArgumentList.Add("-File");
+            startInfo.ArgumentList.Add(scriptPath);
+            foreach (var argument in arguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                SetStatus(T("error"), T("install_process_error"), StatusKind.Error);
+                return;
+            }
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+            if (process.ExitCode != 0)
+            {
+                SetStatus(T("error"), string.IsNullOrWhiteSpace(stderr) ? stdout.Trim() : stderr.Trim(), StatusKind.Error);
+                return;
+            }
+
+            if (InstallStateText is not null)
+            {
+                InstallStateText.Text = GetInstallStateText();
+            }
+            SetStatus(actionName, T("done"), StatusKind.Success);
+        }
+        catch (Exception ex)
+        {
+            App.LogCrash(ex);
+            SetStatus(T("error"), ex.Message, StatusKind.Error);
+        }
+    }
+
+    private static string GetInstallDir()
+    {
+        return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Telemetry Lab");
+    }
+
+    private static string GetInstalledExePath()
+    {
+        return System.IO.Path.Combine(GetInstallDir(), "TelemetryLab.WinUI.exe");
+    }
+
+    private static bool IsRunningFromInstallDir()
+    {
+        var currentDir = System.IO.Path.GetFullPath(AppContext.BaseDirectory).TrimEnd('\\', '/');
+        var installDir = System.IO.Path.GetFullPath(GetInstallDir()).TrimEnd('\\', '/');
+        return string.Equals(currentDir, installDir, StringComparison.OrdinalIgnoreCase);
     }
 
     private UIElement BuildCorrelationTable(string fpsMetric)

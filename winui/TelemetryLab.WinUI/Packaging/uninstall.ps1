@@ -3,7 +3,8 @@
 [CmdletBinding()]
 param(
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\Telemetry Lab"),
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$StopRunning
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,7 +15,9 @@ $desktopShortcut = Join-Path ([Environment]::GetFolderPath("DesktopDirectory")) 
 $appPathKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\TelemetryLab.WinUI.exe"
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\TelemetryLab.WinUI"
 
-Get-Process -Name "TelemetryLab.WinUI" -ErrorAction SilentlyContinue | Stop-Process -Force
+if ($StopRunning) {
+    Get-Process -Name "TelemetryLab.WinUI" -ErrorAction SilentlyContinue | Stop-Process -Force
+}
 
 Remove-Item -LiteralPath $startMenuShortcut -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $desktopShortcut -Force -ErrorAction SilentlyContinue
