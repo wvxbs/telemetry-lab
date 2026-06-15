@@ -118,6 +118,26 @@ Open the dashboard at <http://localhost:8501>. Choose the CSV in the browser, th
 
 No volume is required for normal use.
 
+## Which Version Should I Run?
+
+Use the Docker/Streamlit app when you want the browser workflow, browser uploads/downloads, or a containerized dashboard at `localhost:8501`.
+
+Use the native Windows app when you want a Windows 11-style local tool, live reload from a CSV path that HWiNFO is still writing, the gaming-focused dashboard, and optional Start Menu/installed-app integration.
+
+For the native app, the easiest development artifact is:
+
+```text
+TelemetryLab-WinUI3-windows-x64-exe
+```
+
+For a fully inspectable portable folder, use:
+
+```text
+TelemetryLab-WinUI3-windows-x64
+```
+
+Detailed Windows app documentation: [docs/WINDOWS_APP.md](docs/WINDOWS_APP.md).
+
 ## Windows App Package
 
 The native WinUI 3 app is published to GitHub Packages on every commit to `main`.

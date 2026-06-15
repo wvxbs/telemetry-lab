@@ -563,7 +563,7 @@ public sealed partial class MainWindow : Window
         AddCard(cards, T("cpu_temp_now"), "\uE9CA", metric => IsCpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name), RankHighlightMetric);
         AddCard(cards, T("gpu_usage"), "\uE7F4", IsGpuLoadMetric, RankGamingMetric);
         AddCard(cards, T("cpu_usage"), "\uE950", IsCpuLoadMetric, RankGamingMetric);
-        AddCard(cards, T("vram_usage"), "\uE8A7", IsVramMetric, RankGamingMetric);
+        AddCard(cards, T("vram_usage"), "\uE8A7", IsVramMetric, RankVramMetric);
         AddCard(cards, T("ram_usage"), "\uE8A7", IsRamMetric, RankGamingMetric);
         AddCard(cards, T("memory_temp"), "\uE9CA", IsMemoryTemperatureMetric, RankGamingMetric);
         return cards;
@@ -1216,8 +1216,17 @@ public sealed partial class MainWindow : Window
     private static bool IsVramMetric(MetricSummary metric)
     {
         var low = CsvTelemetryService.Fold(metric.Name);
-        return !IsVoltageMetric(metric.Name) &&
-            (low.Contains("vram") || low.Contains("memoria gpu") || low.Contains("gpu memory") || low.Contains("memoria dedicada"));
+        if (IsVoltageMetric(metric.Name) || IsUnavailableMemoryMetric(metric.Name))
+        {
+            return false;
+        }
+
+        return low.Contains("vram") ||
+            low.Contains("memoria gpu") ||
+            low.Contains("gpu memory") ||
+            low.Contains("memoria dedicada gpu") ||
+            low.Contains("dedicated gpu memory") ||
+            low.Contains("memoria dedicada") && IsGpuMetric(metric.Name);
     }
 
     private static bool IsRamMetric(MetricSummary metric)
@@ -1240,6 +1249,12 @@ public sealed partial class MainWindow : Window
         return low.Contains("[v]") || low.Contains("voltage") || low.Contains("tensao") || low.Contains("vdd");
     }
 
+    private static bool IsUnavailableMemoryMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        return low.Contains("disponivel") || low.Contains("available") || low.Contains("free");
+    }
+
     private static int RankGpuPowerMetric(string name)
     {
         var low = CsvTelemetryService.Fold(name);
@@ -1250,6 +1265,19 @@ public sealed partial class MainWindow : Window
         if (low.Contains("fonte pp")) return 20;
         if (low.Contains("nvvdd") || low.Contains("restante do chip") || low.Contains("system agent")) return 30;
         return 10;
+    }
+
+    private static int RankVramMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        if (IsUnavailableMemoryMetric(name)) return 100;
+        if (low.Contains("memoria dedicada gpu d3d") || low.Contains("dedicated gpu d3d")) return 0;
+        if (low.Contains("memoria gpu alocada") || low.Contains("gpu memory allocated") || low.Contains("allocated gpu memory")) return 1;
+        if (low.Contains("memoria dedicada gpu") || low.Contains("dedicated gpu memory")) return 2;
+        if ((low.Contains("vram") || low.Contains("gpu memory")) && (low.Contains("[mb]") || low.Contains("[gb]"))) return 3;
+        if (low.Contains("uso de memoria gpu") || low.Contains("gpu memory usage") || low.Contains("vram usage")) return 20;
+        if (low.Contains("memoria dinamica gpu") || low.Contains("dynamic gpu memory")) return 40;
+        return 50;
     }
 
     private static int RankHighlightMetric(string name)
@@ -1270,7 +1298,7 @@ public sealed partial class MainWindow : Window
         if (IsGpuMetric(name) && CsvTelemetryService.IsPowerMetric(name)) return 1 + RankGpuPowerMetric(name);
         if (IsGpuMetric(name) && CsvTelemetryService.IsTemperatureMetric(name)) return 20;
         if (IsCpuMetric(name) && CsvTelemetryService.IsTemperatureMetric(name)) return 21;
-        if (low.Contains("vram") || low.Contains("gpu memory") || low.Contains("memoria gpu")) return 30;
+        if (low.Contains("vram") || low.Contains("gpu memory") || low.Contains("memoria gpu")) return 30 + RankVramMetric(name);
         if (low.Contains("ram") || low.Contains("memoria fisica") || low.Contains("physical memory")) return 31;
         if (IsGpuMetric(name) && (low.Contains("%") || low.Contains("load") || low.Contains("uso"))) return 40;
         if (IsCpuMetric(name) && (low.Contains("%") || low.Contains("load") || low.Contains("uso"))) return 41;
