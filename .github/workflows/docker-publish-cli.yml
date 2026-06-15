@@ -1,0 +1,57 @@
+name: Publish CLI Docker image
+
+on:
+  push:
+    branches:
+      - main
+      - feature/cli
+    paths:
+      - ".github/workflows/docker-publish-cli.yml"
+      - "Dockerfile.cli"
+      - "requirements-cli.txt"
+      - "src/**"
+      - "LICENSE"
+      - "THIRD_PARTY_NOTICES.md"
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    name: Publish CLI to Docker Hub
+    runs-on: ubuntu-latest
+    environment: DOCKERHUB_USERNAME
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ vars.DOCKERHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: wvxbs/telemetry-lab-cli
+          tags: |
+            type=raw,value=latest
+            type=ref,event=branch
+            type=sha,prefix=sha-
+
+      - name: Build and push CLI Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.cli
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

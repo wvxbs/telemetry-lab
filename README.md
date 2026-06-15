@@ -118,6 +118,49 @@ Open the dashboard at <http://localhost:8501>. Choose the CSV in the browser, th
 
 No volume is required for normal use.
 
+## CLI
+
+Telemetry Lab also has a terminal interface for quick summaries when you do not need the full dashboard.
+
+The CLI uses the same CSV parser, context inference, canonical power/temperature/FPS metrics, and sensor filters as the app, but prints a compact table or JSON.
+
+Local usage from the repository:
+
+```bash
+PYTHONPATH=src python -m telemetry_lab.cli "/path/to/report.CSV"
+PYTHONPATH=src python -m telemetry_lab.cli "/path/to/report.CSV" --group gaming
+PYTHONPATH=src python -m telemetry_lab.cli "/path/to/report.CSV" --group temperature --temperature F
+PYTHONPATH=src python -m telemetry_lab.cli "/path/to/report.CSV" --format json
+```
+
+Docker image:
+
+```text
+wvxbs/telemetry-lab-cli
+```
+
+Run with a mounted reports folder:
+
+```bash
+docker run --rm \
+  -v "/path/to/reports:/reports:ro" \
+  wvxbs/telemetry-lab-cli \
+  /reports/report.CSV --group summary
+```
+
+For a CSV still being written by HWiNFO:
+
+```bash
+docker run --rm \
+  -v "/path/to/reports:/reports:ro" \
+  wvxbs/telemetry-lab-cli \
+  /reports/report.CSV --group gaming --live --interval 2
+```
+
+In static mode, the CLI does not label the last sample as current. It shows averages for most signals, peaks for temperatures, and keeps the last sample available in JSON as `last_sample`. In live mode, the latest sample is shown as current.
+
+More details: [docs/CLI.md](docs/CLI.md).
+
 ## Streamlit Documentation
 
 This branch is the Streamlit/Docker version of Telemetry Lab. Use it when you want the browser workflow, container deployment, browser uploads/downloads, and the `localhost:8501` dashboard.
