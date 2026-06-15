@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/winui3-shell
     tags:
       - "v*"
   workflow_dispatch:
