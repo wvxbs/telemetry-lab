@@ -6,6 +6,7 @@ param(
     [string]$PfxBase64 = $env:CODESIGN_PFX_BASE64,
     [string]$PfxPassword = $env:CODESIGN_PFX_PASSWORD,
     [string]$TimestampUrl = $(if ($env:CODESIGN_TIMESTAMP_URL) { $env:CODESIGN_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }),
+    [string[]]$AdditionalTargets = @(),
     [switch]$SkipTimestamp
 )
 
@@ -124,6 +125,11 @@ try {
     $targets = @(
         (Join-Path $artifactPath.Path "TelemetryLab.WinUI.exe")
     )
+    foreach ($target in $AdditionalTargets) {
+        if ($target) {
+            $targets += $target
+        }
+    }
 
     foreach ($target in $targets) {
         $null = Get-RequiredFile -Path $target

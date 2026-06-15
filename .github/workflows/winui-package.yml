@@ -17,6 +17,7 @@ jobs:
 
     env:
       PROJECT_PATH: winui/TelemetryLab.WinUI/TelemetryLab.WinUI.csproj
+      LAUNCHER_PATH: winui/TelemetryLab.Launcher/TelemetryLab.Launcher.csproj
       PACKAGE_ID: TelemetryLab.WinUI
       PACKAGE_VERSION: 0.1.${{ github.run_number }}
 
@@ -66,6 +67,21 @@ jobs:
             -CompressionLevel Optimal
           "APP_ZIP=$zipPath" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      - name: Create single-file launcher
+        shell: pwsh
+        run: |
+          $exePath = "${env:RUNNER_TEMP}\TelemetryLab.WinUI-win-x64.exe"
+          $launcherOut = "${env:RUNNER_TEMP}\telemetry-lab-launcher"
+          dotnet publish "${env:LAUNCHER_PATH}" `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:PayloadZip="${env:APP_ZIP}" `
+            --output $launcherOut
+          Copy-Item -LiteralPath (Join-Path $launcherOut "TelemetryLab.exe") -Destination $exePath -Force
+          "APP_EXE=$exePath" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Create NuGet package for GitHub Packages
         shell: pwsh
         run: |
@@ -73,6 +89,7 @@ jobs:
           $toolsRoot = Join-Path $packageRoot "tools\win-x64"
           New-Item -ItemType Directory -Force -Path $toolsRoot | Out-Null
           Copy-Item -LiteralPath "${env:APP_ZIP}" -Destination (Join-Path $toolsRoot "TelemetryLab.WinUI-win-x64.zip")
+          Copy-Item -LiteralPath "${env:APP_EXE}" -Destination (Join-Path $toolsRoot "TelemetryLab.WinUI-win-x64.exe")
 
           $repositoryUrl = "https://github.com/${{ github.repository }}"
           $nuspec = @"
@@ -85,10 +102,11 @@ jobs:
               <license type="expression">GPL-3.0-or-later</license>
               <projectUrl>$repositoryUrl</projectUrl>
               <repository type="git" url="$repositoryUrl" commit="${{ github.sha }}" />
-              <description>Telemetry Lab WinUI 3 native Windows app package. The self-contained win-x64 app zip is stored under tools/win-x64.</description>
+              <description>Telemetry Lab WinUI 3 native Windows app package. The self-contained win-x64 app zip and one-file launcher are stored under tools/win-x64.</description>
             </metadata>
             <files>
               <file src="tools\win-x64\TelemetryLab.WinUI-win-x64.zip" target="tools\win-x64" />
+              <file src="tools\win-x64\TelemetryLab.WinUI-win-x64.exe" target="tools\win-x64" />
             </files>
           </package>
           "@
@@ -110,7 +128,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: TelemetryLab.WinUI-win-x64
-          path: ${{ env.APP_ZIP }}
+          path: |
+            ${{ env.APP_ZIP }}
+            ${{ env.APP_EXE }}
           if-no-files-found: error
 
       - name: Publish to GitHub Packages

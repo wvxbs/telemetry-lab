@@ -122,15 +122,16 @@ No volume is required for normal use.
 
 The native WinUI 3 app is published to GitHub Packages on every commit to `main`.
 
-The Windows artifact is also built by GitHub Actions without replacing the Docker workflow. Open **Actions**, choose **Build Windows app**, and download `TelemetryLab-WinUI3-windows-x64`. Version tags such as `v0.1.0` also publish the same zip in GitHub Releases.
+The Windows artifact is also built by GitHub Actions without replacing the Docker workflow. Open **Actions**, choose **Build Windows app**, and download `TelemetryLab-WinUI3-windows-x64-exe` for the easiest path: a single `TelemetryLab.exe` file that extracts the WinUI app into your user profile and starts it. Download `TelemetryLab-WinUI3-windows-x64` only if you want the full portable folder. Version tags such as `v0.1.0` also publish both formats in GitHub Releases.
 
-Open the repository page on GitHub, go to **Packages**, and download the latest `TelemetryLab.WinUI` NuGet package. The package is a distribution carrier, not a library: open or extract the `.nupkg` file as a zip and use the app bundle at:
+Open the repository page on GitHub, go to **Packages**, and download the latest `TelemetryLab.WinUI` NuGet package. The package is a distribution carrier, not a library: open or extract the `.nupkg` file as a zip and use the single-file launcher or the app bundle at:
 
 ```text
+tools/win-x64/TelemetryLab.WinUI-win-x64.exe
 tools/win-x64/TelemetryLab.WinUI-win-x64.zip
 ```
 
-Extract that zip on Windows and run `TelemetryLab.WinUI.exe`.
+Run the `.exe` directly for the lowest-friction experience. Extract the `.zip` on Windows and run `TelemetryLab.WinUI.exe` if you prefer to inspect or keep the full portable folder.
 
 You can keep using the extracted folder as a portable tool. To install it like a normal per-user Windows app, open the native app and use the **Installation** / **Instalação** page. It exposes the same per-user install, update, repair, and uninstall flow used by the package scripts.
 

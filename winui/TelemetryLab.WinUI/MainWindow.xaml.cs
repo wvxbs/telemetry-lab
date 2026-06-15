@@ -20,6 +20,8 @@ namespace TelemetryLab.WinUI;
 
 public sealed partial class MainWindow : Window
 {
+    private sealed record HighlightMetric(string Label, string Glyph, string Source, string Value, string Subtitle);
+
     private readonly CsvTelemetryService _service = new();
     private readonly IntPtr _hwnd;
     private readonly DispatcherTimer _liveReloadTimer = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -31,12 +33,14 @@ public sealed partial class MainWindow : Window
     private string _language = "pt";
     private string _temperatureUnit = "C";
     private string _chartType = "Linha";
+    private string _detailLevel = "Normal";
     private string _metricSearch = string.Empty;
     private double _fpsMinimum = 30;
     private double _fpsMaximum = 1000;
     private long _lastLoadedWriteTicks;
     private long _lastLoadedSize;
     private bool _liveReload;
+    private string _liveReloadState = string.Empty;
     private bool _loading;
     private bool _fullscreen;
 
@@ -51,6 +55,7 @@ public sealed partial class MainWindow : Window
     private FontIcon StatusIcon = null!;
     private Border StatusPanel = null!;
     private TextBlock InstallStateText = null!;
+    private TextBlock LiveReloadStateText = null!;
 
     public MainWindow()
     {
@@ -209,6 +214,7 @@ public sealed partial class MainWindow : Window
             UpdateLiveReloadTimer();
             RebuildSidebar();
         }));
+        side.Children.Add(BuildLiveReloadStateRow());
 
         side.Children.Add(BuildNavItem("\uE9D2", "Relatório", T("report")));
         side.Children.Add(BuildNavItem("\uE945", "Potência", T("power")));
@@ -235,6 +241,11 @@ public sealed partial class MainWindow : Window
         side.Children.Add(BuildSettingCombo(T("chart_type"), _chartType, ["Linha", "Área", "Dispersão", "Barras", "Heatmap"], TranslateChartType, value =>
         {
             _chartType = value;
+            RenderMainSurface();
+        }));
+        side.Children.Add(BuildSettingCombo(T("detail_level"), _detailLevel, ["Essencial", "Normal", "Completo"], TranslateDetailLevel, value =>
+        {
+            _detailLevel = value;
             RenderMainSurface();
         }));
 
@@ -388,10 +399,113 @@ public sealed partial class MainWindow : Window
         return BuildCard(stack, padding: 16);
     }
 
+    private UIElement BuildQuickLookSection()
+    {
+        var metrics = new[]
+        {
+            BuildHighlightMetric(T("fps_now"), "\uE7C1", m => CsvTelemetryService.IsFpsMetric(m.Name)),
+            BuildHighlightMetric(T("cpu_power_now"), "\uE950", m => IsCpuMetric(m.Name) && CsvTelemetryService.IsPowerMetric(m.Name)),
+            BuildHighlightMetric(T("gpu_power_now"), "\uE7F4", m => IsGpuMetric(m.Name) && CsvTelemetryService.IsPowerMetric(m.Name)),
+            BuildHighlightMetric(T("system_power_now"), "\uE945", m => IsSystemPowerMetric(m.Name)),
+            BuildHighlightMetric(T("cpu_temp_now"), "\uE9CA", m => IsCpuMetric(m.Name) && CsvTelemetryService.IsTemperatureMetric(m.Name)),
+            BuildHighlightMetric(T("gpu_temp_now"), "\uE9CA", m => IsGpuMetric(m.Name) && CsvTelemetryService.IsTemperatureMetric(m.Name))
+        }
+        .Where(metric => metric is not null)
+        .Cast<HighlightMetric>()
+        .Take(_detailLevel == "Essencial" ? 4 : 6)
+        .ToList();
+
+        if (metrics.Count == 0)
+        {
+            return new TextBlock { Text = T("quick_look_empty"), Opacity = 0.72 };
+        }
+
+        var grid = new Grid
+        {
+            ColumnSpacing = 10,
+            RowSpacing = 10
+        };
+        var columns = _detailLevel == "Essencial" ? 4 : 3;
+        for (var i = 0; i < columns; i++)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+        }
+        for (var i = 0; i < Math.Ceiling(metrics.Count / (double)columns); i++)
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+
+        for (var i = 0; i < metrics.Count; i++)
+        {
+            var card = BuildHighlightCard(metrics[i]);
+            Grid.SetColumn(card, i % columns);
+            Grid.SetRow(card, i / columns);
+            grid.Children.Add(card);
+        }
+
+        return grid;
+    }
+
+    private HighlightMetric? BuildHighlightMetric(string label, string glyph, Func<MetricSummary, bool> predicate)
+    {
+        var metric = _report.Summaries
+            .Where(predicate)
+            .OrderBy(metric => RankHighlightMetric(metric.Name))
+            .ThenBy(metric => metric.Name, StringComparer.CurrentCultureIgnoreCase)
+            .FirstOrDefault();
+        if (metric is null)
+        {
+            return null;
+        }
+
+        var value = DisplayValue(metric.Name, metric.Last);
+        var average = DisplayValue(metric.Name, metric.Average);
+        var unit = UnitForMetric(metric.Name);
+        return new HighlightMetric(label, glyph, metric.Name, FormatHighlightValue(value, unit), $"{T("avg")}: {FormatHighlightValue(average, unit)}");
+    }
+
+    private Border BuildHighlightCard(HighlightMetric metric)
+    {
+        var stack = new StackPanel { Spacing = 7 };
+        stack.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Children =
+            {
+                new FontIcon { Glyph = metric.Glyph, FontSize = 16, Foreground = AccentBrush() },
+                new TextBlock { Text = metric.Label, FontSize = 12, Opacity = 0.72, VerticalAlignment = VerticalAlignment.Center }
+            }
+        });
+        stack.Children.Add(new TextBlock
+        {
+            Text = metric.Value,
+            FontSize = 26,
+            FontWeight = new Windows.UI.Text.FontWeight { Weight = 650 },
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        stack.Children.Add(new TextBlock
+        {
+            Text = metric.Subtitle,
+            FontSize = 11,
+            Opacity = 0.64,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        stack.Children.Add(new TextBlock
+        {
+            Text = metric.Source,
+            FontSize = 10,
+            Opacity = 0.54,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        });
+        return BuildCard(stack, padding: 14);
+    }
+
     private UIElement BuildOverviewSection()
     {
         var panel = BuildCardStack(T("overview"), T("overview_subtitle"));
-        var metrics = FilterMetrics(_report.Summaries).Take(12).ToList();
+        panel.Children.Add(BuildQuickLookSection());
+        var metrics = FilterMetrics(_report.Summaries).Take(OverviewMetricLimit()).ToList();
         panel.Children.Add(BuildMetricTable(metrics));
         var first = metrics.FirstOrDefault();
         if (first is not null)
@@ -404,7 +518,7 @@ public sealed partial class MainWindow : Window
 
     private UIElement BuildMetricSection(string group, string subtitle)
     {
-        var metrics = FilterMetrics(_service.CuratedMetrics(_report, group, limit: 16)).ToList();
+        var metrics = FilterMetrics(_service.CuratedMetrics(_report, group, limit: SectionMetricLimit())).ToList();
         var panel = BuildCardStack(group, subtitle);
         if (metrics.Count == 0)
         {
@@ -422,7 +536,7 @@ public sealed partial class MainWindow : Window
     private UIElement BuildDataSection()
     {
         var panel = BuildCardStack(T("data"), T("data_subtitle"));
-        panel.Children.Add(BuildMetricTable(FilterMetrics(_report.Summaries).Take(42)));
+        panel.Children.Add(BuildMetricTable(FilterMetrics(_report.Summaries).Take(DataMetricLimit())));
         return BuildCard(panel);
     }
 
@@ -498,14 +612,16 @@ public sealed partial class MainWindow : Window
         var values = _report.Numeric.TryGetValue(metricName, out var series)
             ? series.Where(v => v.HasValue).Select(v => DisplayValue(metricName, v!.Value)).TakeLast(420).ToArray()
             : Array.Empty<double>();
+        var unit = UnitForMetric(metricName);
+        var xAxis = string.Format(T("x_axis_samples"), values.Length);
         var canvas = new Canvas
         {
-            Height = 220,
+            Height = 236,
             MinWidth = 600,
             Background = LayerBrush(IsLightTheme ? (byte)0x50 : (byte)0x34)
         };
-        canvas.Loaded += (_, _) => DrawChart(canvas, values, chartType);
-        canvas.SizeChanged += (_, _) => DrawChart(canvas, values, chartType);
+        canvas.Loaded += (_, _) => DrawChart(canvas, values, chartType, unit, xAxis);
+        canvas.SizeChanged += (_, _) => DrawChart(canvas, values, chartType, unit, xAxis);
 
         var label = new TextBlock
         {
@@ -515,13 +631,21 @@ public sealed partial class MainWindow : Window
             Margin = new Thickness(0, 8, 0, 0),
             TextTrimming = TextTrimming.CharacterEllipsis
         };
+        var axisLabel = new TextBlock
+        {
+            Text = $"{T("x_axis")}: {xAxis} · {T("y_axis")}: {unit}",
+            FontSize = 11,
+            Opacity = 0.62,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
         var stack = new StackPanel { Spacing = 6 };
         stack.Children.Add(label);
-        stack.Children.Add(new Border { CornerRadius = new CornerRadius(8), Child = canvas, Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, 2000, 220) } });
+        stack.Children.Add(axisLabel);
+        stack.Children.Add(new Border { CornerRadius = new CornerRadius(8), Child = canvas, Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, 2000, 236) } });
         return stack;
     }
 
-    private static void DrawChart(Canvas canvas, IReadOnlyList<double> values, string chartType)
+    private static void DrawChart(Canvas canvas, IReadOnlyList<double> values, string chartType, string unit, string xAxisLabel)
     {
         canvas.Children.Clear();
         if (values.Count < 2 || canvas.ActualWidth <= 0)
@@ -531,24 +655,31 @@ public sealed partial class MainWindow : Window
 
         var width = canvas.ActualWidth;
         var height = canvas.Height;
+        const double left = 58;
+        const double right = 12;
+        const double top = 14;
+        const double bottom = 30;
+        var plotWidth = Math.Max(1, width - left - right);
+        var plotHeight = Math.Max(1, height - top - bottom);
         var min = values.Min();
         var max = values.Max();
         var span = Math.Max(0.0001, max - min);
+        AddChartChrome(canvas, left, top, plotWidth, plotHeight, min, max, unit, xAxisLabel);
 
         if (chartType == "Heatmap")
         {
-            var cellWidth = Math.Max(2, width / values.Count);
+            var cellWidth = Math.Max(2, plotWidth / values.Count);
             for (var i = 0; i < values.Count; i++)
             {
                 var intensity = (values[i] - min) / span;
                 var rect = new Rectangle
                 {
                     Width = Math.Ceiling(cellWidth),
-                    Height = height,
+                    Height = plotHeight,
                     Fill = new SolidColorBrush(WithAlpha(AccentColor(), (byte)(0x28 + intensity * 0xB8)))
                 };
-                Canvas.SetLeft(rect, i * cellWidth);
-                Canvas.SetTop(rect, 0);
+                Canvas.SetLeft(rect, left + i * cellWidth);
+                Canvas.SetTop(rect, top);
                 canvas.Children.Add(rect);
             }
 
@@ -557,19 +688,19 @@ public sealed partial class MainWindow : Window
 
         if (chartType == "Barras")
         {
-            var barWidth = Math.Max(1, width / values.Count);
+            var barWidth = Math.Max(1, plotWidth / values.Count);
             for (var i = 0; i < values.Count; i++)
             {
                 var normalized = (values[i] - min) / span;
-                var barHeight = Math.Max(1, normalized * (height - 18));
+                var barHeight = Math.Max(1, normalized * plotHeight);
                 var rect = new Rectangle
                 {
                     Width = Math.Max(1, barWidth - 1),
                     Height = barHeight,
                     Fill = AccentLayerBrush(0xB0)
                 };
-                Canvas.SetLeft(rect, i * barWidth);
-                Canvas.SetTop(rect, height - barHeight - 6);
+                Canvas.SetLeft(rect, left + i * barWidth);
+                Canvas.SetTop(rect, top + plotHeight - barHeight);
                 canvas.Children.Add(rect);
             }
 
@@ -579,8 +710,8 @@ public sealed partial class MainWindow : Window
         var points = new PointCollection();
         for (var i = 0; i < values.Count; i++)
         {
-            var x = values.Count == 1 ? 0 : i * width / (values.Count - 1);
-            var y = height - ((values[i] - min) / span * (height - 18)) - 9;
+            var x = left + (values.Count == 1 ? 0 : i * plotWidth / (values.Count - 1));
+            var y = top + plotHeight - ((values[i] - min) / span * plotHeight);
             points.Add(new Windows.Foundation.Point(x, y));
         }
 
@@ -591,12 +722,12 @@ public sealed partial class MainWindow : Window
                 Fill = AccentLayerBrush(0x4C),
                 StrokeThickness = 0
             };
-            area.Points.Add(new Windows.Foundation.Point(0, height));
+            area.Points.Add(new Windows.Foundation.Point(left, top + plotHeight));
             foreach (var point in points)
             {
                 area.Points.Add(point);
             }
-            area.Points.Add(new Windows.Foundation.Point(width, height));
+            area.Points.Add(new Windows.Foundation.Point(left + plotWidth, top + plotHeight));
             canvas.Children.Add(area);
         }
 
@@ -624,6 +755,54 @@ public sealed partial class MainWindow : Window
             StrokeThickness = 2.4,
             Stroke = AccentBrush()
         });
+    }
+
+    private static void AddChartChrome(Canvas canvas, double left, double top, double plotWidth, double plotHeight, double min, double max, string unit, string xAxisLabel)
+    {
+        var axisBrush = SubtleBorderBrush();
+        canvas.Children.Add(new Line
+        {
+            X1 = left,
+            X2 = left,
+            Y1 = top,
+            Y2 = top + plotHeight,
+            Stroke = axisBrush,
+            StrokeThickness = 1
+        });
+        canvas.Children.Add(new Line
+        {
+            X1 = left,
+            X2 = left + plotWidth,
+            Y1 = top + plotHeight,
+            Y2 = top + plotHeight,
+            Stroke = axisBrush,
+            StrokeThickness = 1
+        });
+
+        AddCanvasLabel(canvas, FormatAxisValue(max, unit), 8, top - 2, 0.66);
+        AddCanvasLabel(canvas, FormatAxisValue(min, unit), 8, top + plotHeight - 14, 0.66);
+        AddCanvasLabel(canvas, xAxisLabel, left + Math.Max(0, plotWidth - 150), top + plotHeight + 8, 0.58);
+    }
+
+    private static void AddCanvasLabel(Canvas canvas, string text, double left, double top, double opacity)
+    {
+        var label = new TextBlock
+        {
+            Text = text,
+            FontSize = 10,
+            Opacity = opacity,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = 160
+        };
+        Canvas.SetLeft(label, left);
+        Canvas.SetTop(label, top);
+        canvas.Children.Add(label);
+    }
+
+    private static string FormatAxisValue(double value, string unit)
+    {
+        var formatted = Math.Abs(value) >= 100 ? value.ToString("N0") : value.ToString("N1");
+        return unit == "-" ? formatted : $"{formatted} {unit}";
     }
 
     private static StackPanel BuildCardStack(string title, string subtitle)
@@ -680,6 +859,33 @@ public sealed partial class MainWindow : Window
 
         button.Click += clickHandler;
         return button;
+    }
+
+    private UIElement BuildLiveReloadStateRow()
+    {
+        LiveReloadStateText = new TextBlock
+        {
+            Text = GetLiveReloadState(),
+            FontSize = 12,
+            Opacity = 0.72,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 10,
+            Padding = new Thickness(8, 0, 8, 2)
+        };
+        row.Children.Add(new FontIcon
+        {
+            Glyph = _liveReload ? "\uE895" : "\uE711",
+            FontSize = 14,
+            Foreground = _liveReload ? AccentBrush() : null,
+            Opacity = _liveReload ? 1 : 0.72
+        });
+        row.Children.Add(LiveReloadStateText);
+        return row;
     }
 
     private UIElement BuildNavItem(string glyph, string section, string label)
@@ -834,12 +1040,97 @@ public sealed partial class MainWindow : Window
         return DisplayValue(metric.Name, value).ToString("N1");
     }
 
+    private static string FormatHighlightValue(double value, string unit)
+    {
+        var formatted = Math.Abs(value) >= 100 ? value.ToString("N0") : value.ToString("N1");
+        return unit == "-" ? formatted : $"{formatted} {unit}";
+    }
+
     private double DisplayValue(string metricName, double value)
     {
         return _temperatureUnit == "F" && CsvTelemetryService.IsTemperatureMetric(metricName)
             ? value * 9 / 5 + 32
             : value;
     }
+
+    private string UnitForMetric(string metricName)
+    {
+        if (CsvTelemetryService.IsTemperatureMetric(metricName))
+        {
+            return _temperatureUnit == "F" ? "°F" : "°C";
+        }
+
+        var low = CsvTelemetryService.Fold(metricName);
+        if (CsvTelemetryService.IsFpsMetric(metricName)) return "FPS";
+        if (CsvTelemetryService.IsPowerMetric(metricName)) return "W";
+        if (low.Contains("%") || low.Contains("load") || low.Contains("carga") || low.Contains("uso")) return "%";
+        if (low.Contains("mhz")) return "MHz";
+        if (low.Contains("ghz")) return "GHz";
+        if (low.Contains("rpm")) return "RPM";
+        if (low.Contains("gb")) return "GB";
+        if (low.Contains("mb")) return "MB";
+
+        var bracketStart = metricName.LastIndexOf('[');
+        var bracketEnd = metricName.LastIndexOf(']');
+        if (bracketStart >= 0 && bracketEnd > bracketStart)
+        {
+            var unit = metricName[(bracketStart + 1)..bracketEnd].Trim();
+            return string.IsNullOrWhiteSpace(unit) ? "-" : unit;
+        }
+
+        return "-";
+    }
+
+    private static bool IsCpuMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        return low.Contains("cpu") || low.Contains("processador") || low.Contains("core");
+    }
+
+    private static bool IsGpuMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        return low.Contains("gpu") || low.Contains("video") || low.Contains("graphics");
+    }
+
+    private static bool IsSystemPowerMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        return CsvTelemetryService.IsPowerMetric(name) &&
+            (low.Contains("potencia total do sistema") || low.Contains("system total power") || low.Contains("system power"));
+    }
+
+    private static int RankHighlightMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        if (low.Contains("potencia total do sistema") || low.Contains("system total power")) return 0;
+        if (low.Contains("cpu package") || low.Contains("consumo de energia total da cpu")) return 1;
+        if (low.Contains("gpu consumo de energia") || low.Contains("gpu total power")) return 2;
+        if (low.Contains("framerate") || low.Contains("frame rate")) return 3;
+        if (low.Contains("hotspot") || low.Contains("ponto quente")) return 4;
+        return 10;
+    }
+
+    private int OverviewMetricLimit() => _detailLevel switch
+    {
+        "Essencial" => 8,
+        "Completo" => 20,
+        _ => 12
+    };
+
+    private int SectionMetricLimit() => _detailLevel switch
+    {
+        "Essencial" => 8,
+        "Completo" => 28,
+        _ => 16
+    };
+
+    private int DataMetricLimit() => _detailLevel switch
+    {
+        "Essencial" => 24,
+        "Completo" => 96,
+        _ => 42
+    };
 
     private string LocalizeGroup(string group) => (_language, group) switch
     {
@@ -859,6 +1150,14 @@ public sealed partial class MainWindow : Window
         ("en", "Área") => "Area",
         ("en", "Dispersão") => "Scatter",
         ("en", "Barras") => "Bars",
+        _ => value
+    };
+
+    private string TranslateDetailLevel(string value) => (_language, value) switch
+    {
+        ("en", "Essencial") => "Essential",
+        ("en", "Normal") => "Normal",
+        ("en", "Completo") => "Full",
         _ => value
     };
 
@@ -910,6 +1209,11 @@ public sealed partial class MainWindow : Window
             "celsius" => "Celsius",
             "fahrenheit" => "Fahrenheit",
             "chart_type" => "Chart type",
+            "detail_level" => "Detail level",
+            "x_axis" => "X axis",
+            "y_axis" => "Y axis",
+            "x_axis_samples" => "last {0:N0} samples",
+            "y_axis_unit" => "values in {0}",
             "search" => "Search",
             "search_placeholder" => "power, temperature, fps...",
             "f11_hint" => "F11 fullscreen",
@@ -924,6 +1228,13 @@ public sealed partial class MainWindow : Window
             "empty_body" => "The native app now keeps the common Streamlit analysis flow: stats, focused views, custom charts, glossary, language, units, live reload, and fullscreen.",
             "overview" => "Overview",
             "overview_subtitle" => "Curated summary of the main metric families.",
+            "quick_look_empty" => "No quick-look metric was detected in this report.",
+            "fps_now" => "Current FPS",
+            "cpu_power_now" => "CPU power",
+            "gpu_power_now" => "GPU power",
+            "system_power_now" => "System power",
+            "cpu_temp_now" => "CPU temp",
+            "gpu_temp_now" => "GPU temp",
             "power_subtitle" => "Prioritized energy and power sensors.",
             "temperature_subtitle" => "Main component temperatures and hotspots.",
             "frames_subtitle" => "FPS statistics with valid range filtering.",
@@ -968,6 +1279,11 @@ public sealed partial class MainWindow : Window
             "error" => "Error",
             "live_on" => "Watching for CSV changes.",
             "live_off" => "Stopped watching the CSV.",
+            "live_waiting_path" => "Live reload is on, waiting for a readable CSV path.",
+            "live_file_missing" => "Live reload is on, but the CSV was not found.",
+            "live_watching_file" => "Watching {0} for changes.",
+            "live_change_detected" => "Change detected. Reloading CSV...",
+            "live_error" => "Live reload failed. Check the CSV and try again.",
             "desc_fps" => "Frame rate or frame source captured during the run.",
             "desc_temperature" => "Temperature sensor. Values are converted when Fahrenheit is selected.",
             "desc_power" => "Power or energy sensor. HWiNFO can expose physical, rail, and aggregate sensors with similar names.",
@@ -997,6 +1313,11 @@ public sealed partial class MainWindow : Window
             "celsius" => "Celsius",
             "fahrenheit" => "Fahrenheit",
             "chart_type" => "Tipo de gráfico",
+            "detail_level" => "Detalhe",
+            "x_axis" => "Eixo X",
+            "y_axis" => "Eixo Y",
+            "x_axis_samples" => "últimas {0:N0} amostras",
+            "y_axis_unit" => "valores em {0}",
             "search" => "Busca",
             "search_placeholder" => "potência, temperatura, fps...",
             "f11_hint" => "F11 tela cheia",
@@ -1011,6 +1332,13 @@ public sealed partial class MainWindow : Window
             "empty_body" => "O app nativo agora preserva o fluxo comum do Streamlit: estatísticas, visões focadas, gráfico customizado, glossário, idioma, unidades, live reload e tela cheia.",
             "overview" => "Visão geral",
             "overview_subtitle" => "Resumo curado das famílias principais.",
+            "quick_look_empty" => "Nenhuma métrica de leitura rápida foi detectada neste relatório.",
+            "fps_now" => "FPS atual",
+            "cpu_power_now" => "Potência CPU",
+            "gpu_power_now" => "Potência GPU",
+            "system_power_now" => "Potência sistema",
+            "cpu_temp_now" => "Temp. CPU",
+            "gpu_temp_now" => "Temp. GPU",
             "power_subtitle" => "Sensores de energia e consumo priorizados.",
             "temperature_subtitle" => "Temperaturas principais e hotspots.",
             "frames_subtitle" => "Estatísticas de FPS com filtro de faixa válida.",
@@ -1055,6 +1383,11 @@ public sealed partial class MainWindow : Window
             "error" => "Erro",
             "live_on" => "Observando alterações no CSV.",
             "live_off" => "Observação do CSV pausada.",
+            "live_waiting_path" => "Leitura dinâmica ligada, aguardando um caminho de CSV válido.",
+            "live_file_missing" => "Leitura dinâmica ligada, mas o CSV não foi encontrado.",
+            "live_watching_file" => "Observando {0} por alterações.",
+            "live_change_detected" => "Alteração detectada. Relendo CSV...",
+            "live_error" => "Leitura dinâmica falhou. Confira o CSV e tente novamente.",
             "desc_fps" => "Taxa de quadros ou fonte de frames capturada durante o teste.",
             "desc_temperature" => "Sensor de temperatura. Os valores são convertidos ao selecionar Fahrenheit.",
             "desc_power" => "Sensor de potência ou energia. O HWiNFO pode expor sensores físicos, trilhos e agregados com nomes parecidos.",
@@ -1475,11 +1808,20 @@ public sealed partial class MainWindow : Window
             _lastLoadedWriteTicks = info.LastWriteTimeUtc.Ticks;
             _lastLoadedSize = info.Length;
             RenderMainSurface();
+            SetStatus(T("loaded"), $"{_report.RowCount:N0} {T("samples").ToLowerInvariant()}.", StatusKind.Success);
+            if (_liveReload)
+            {
+                SetLiveReloadState(string.Format(T("live_watching_file"), System.IO.Path.GetFileName(path)));
+            }
         }
         catch (Exception ex)
         {
             App.LogCrash(ex);
             SetStatus(T("error"), ex.Message, StatusKind.Error);
+            if (_liveReload)
+            {
+                SetLiveReloadState(T("live_error"));
+            }
         }
         finally
         {
@@ -1537,14 +1879,33 @@ public sealed partial class MainWindow : Window
     {
         _liveReloadTimer.Tick += async (_, _) =>
         {
-            if (!_liveReload || string.IsNullOrWhiteSpace(_currentPath) || !File.Exists(_currentPath) || _loading)
+            if (!_liveReload)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_currentPath))
+            {
+                SetLiveReloadState(T("live_waiting_path"));
+                return;
+            }
+
+            if (!File.Exists(_currentPath))
+            {
+                SetLiveReloadState(T("live_file_missing"));
+                return;
+            }
+
+            if (_loading)
             {
                 return;
             }
 
             var info = new FileInfo(_currentPath);
+            SetLiveReloadState(string.Format(T("live_watching_file"), info.Name));
             if (info.LastWriteTimeUtc.Ticks != _lastLoadedWriteTicks || info.Length != _lastLoadedSize)
             {
+                SetLiveReloadState(T("live_change_detected"));
                 await LoadCurrentPathAsync();
             }
         };
@@ -1554,13 +1915,47 @@ public sealed partial class MainWindow : Window
     {
         if (_liveReload)
         {
+            _currentPath = PathBox.Text;
             _liveReloadTimer.Start();
-            SetStatus(T("live_reload"), T("live_on"), StatusKind.Info);
+            var state = GetLiveReloadState();
+            SetLiveReloadState(state);
+            SetStatus(T("live_reload"), state, StatusKind.Info);
         }
         else
         {
             _liveReloadTimer.Stop();
+            SetLiveReloadState(T("live_off"));
             SetStatus(T("live_reload"), T("live_off"), StatusKind.Info);
+        }
+    }
+
+    private string GetLiveReloadState()
+    {
+        if (!_liveReload)
+        {
+            return T("live_off");
+        }
+
+        var path = string.IsNullOrWhiteSpace(_currentPath) ? PathBox?.Text?.Trim() ?? string.Empty : _currentPath;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return T("live_waiting_path");
+        }
+
+        if (!File.Exists(path))
+        {
+            return T("live_file_missing");
+        }
+
+        return string.Format(T("live_watching_file"), System.IO.Path.GetFileName(path));
+    }
+
+    private void SetLiveReloadState(string message)
+    {
+        _liveReloadState = message;
+        if (LiveReloadStateText is not null)
+        {
+            LiveReloadStateText.Text = string.IsNullOrWhiteSpace(_liveReloadState) ? GetLiveReloadState() : _liveReloadState;
         }
     }
 

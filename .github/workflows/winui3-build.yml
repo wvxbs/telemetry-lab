@@ -19,8 +19,10 @@ jobs:
 
     env:
       PROJECT_PATH: winui/TelemetryLab.WinUI/TelemetryLab.WinUI.csproj
+      LAUNCHER_PATH: winui/TelemetryLab.Launcher/TelemetryLab.Launcher.csproj
       ARTIFACT_DIR: artifacts/TelemetryLab-WinUI3
       ARTIFACT_NAME: TelemetryLab-WinUI3-windows-x64
+      SFX_EXE: artifacts/TelemetryLab-WinUI3-windows-x64.exe
 
     steps:
       - name: Checkout
@@ -51,6 +53,30 @@ jobs:
             -Destination "${env:ARTIFACT_DIR}" `
             -Force
 
+      - name: Create launcher payload
+        shell: pwsh
+        run: |
+          $payload = "${env:RUNNER_TEMP}\TelemetryLab.WinUI-payload.zip"
+          Compress-Archive `
+            -Path "${env:ARTIFACT_DIR}\*" `
+            -DestinationPath $payload `
+            -CompressionLevel Optimal `
+            -Force
+          "PAYLOAD_ZIP=$payload" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Publish single-file launcher
+        shell: pwsh
+        run: |
+          $launcherOut = "${env:RUNNER_TEMP}\telemetry-lab-launcher"
+          dotnet publish "${env:LAUNCHER_PATH}" `
+            -c Release `
+            -r win-x64 `
+            -p:SelfContained=true `
+            -p:PublishSingleFile=true `
+            -p:PayloadZip="${env:PAYLOAD_ZIP}" `
+            -o $launcherOut
+          Copy-Item -LiteralPath (Join-Path $launcherOut "TelemetryLab.exe") -Destination "${env:SFX_EXE}" -Force
+
       - name: Sign Windows executables if configured
         shell: pwsh
         env:
@@ -60,12 +86,20 @@ jobs:
         run: >
           ./scripts/sign-windows-artifact.ps1
           -ArtifactDir "${env:ARTIFACT_DIR}"
+          -AdditionalTargets "${env:SFX_EXE}"
 
       - name: Upload WinUI artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ env.ARTIFACT_DIR }}/**
+
+      - name: Upload single-file launcher
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelemetryLab-WinUI3-windows-x64-exe
+          path: ${{ env.SFX_EXE }}
+          if-no-files-found: error
 
       - name: Create release archive
         if: startsWith(github.ref, 'refs/tags/v')
@@ -80,4 +114,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/${{ env.ARTIFACT_NAME }}.zip
+          files: |
+            artifacts/${{ env.ARTIFACT_NAME }}.zip
+            ${{ env.SFX_EXE }}
