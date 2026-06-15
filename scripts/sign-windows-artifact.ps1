@@ -7,6 +7,7 @@ param(
     [string]$PfxPassword = $env:CODESIGN_PFX_PASSWORD,
     [string]$TimestampUrl = $(if ($env:CODESIGN_TIMESTAMP_URL) { $env:CODESIGN_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }),
     [string[]]$AdditionalTargets = @(),
+    [switch]$RequireCertificate,
     [switch]$SkipTimestamp
 )
 
@@ -102,6 +103,10 @@ $temporaryPfx = $null
 try {
     if (-not $PfxPath) {
         if (-not $PfxBase64) {
+            if ($RequireCertificate) {
+                throw "No code signing certificate configured. Set WINDOWS_CODESIGN_PFX_BASE64 and WINDOWS_CODESIGN_PFX_PASSWORD before publishing Windows executables."
+            }
+
             Write-Host "No code signing certificate configured. Skipping Authenticode signing."
             return
         }
@@ -111,6 +116,10 @@ try {
     }
 
     if (-not $PfxPassword) {
+        if ($RequireCertificate) {
+            throw "No code signing password configured. Set WINDOWS_CODESIGN_PFX_PASSWORD before publishing Windows executables."
+        }
+
         Write-Host "No code signing password configured. Skipping Authenticode signing."
         return
     }
@@ -122,17 +131,21 @@ try {
         $PfxPassword,
         [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
     )
-    $targets = @(
-        (Join-Path $artifactPath.Path "TelemetryLab.WinUI.exe")
-    )
+    $targets = @(Get-ChildItem -LiteralPath $artifactPath.Path -Recurse -Filter "*.exe" |
+        Select-Object -ExpandProperty FullName)
     foreach ($target in $AdditionalTargets) {
         if ($target) {
             $targets += $target
         }
     }
+    $targets = $targets | Sort-Object -Unique
 
     foreach ($target in $targets) {
         $null = Get-RequiredFile -Path $target
+    }
+
+    if ($targets.Count -eq 0) {
+        throw "No Windows executable was found to sign in $($artifactPath.Path)."
     }
 
     Write-Host "Signing Windows executables in $($artifactPath.Path)"

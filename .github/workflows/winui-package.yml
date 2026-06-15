@@ -49,6 +49,17 @@ jobs:
             -p:WindowsPackageType=None `
             --output "${env:RUNNER_TEMP}\telemetry-lab-winui"
 
+      - name: Sign published WinUI app
+        shell: pwsh
+        env:
+          CODESIGN_PFX_BASE64: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PFX_PASSWORD }}
+          CODESIGN_TIMESTAMP_URL: ${{ vars.CODESIGN_TIMESTAMP_URL }}
+        run: >
+          ./scripts/sign-windows-artifact.ps1
+          -ArtifactDir "${env:RUNNER_TEMP}\telemetry-lab-winui"
+          -RequireCertificate
+
       - name: Create app zip
         shell: pwsh
         run: |
@@ -82,6 +93,28 @@ jobs:
           Copy-Item -LiteralPath (Join-Path $launcherOut "TelemetryLab.exe") -Destination $exePath -Force
           "APP_EXE=$exePath" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      - name: Sign single-file launcher
+        shell: pwsh
+        env:
+          CODESIGN_PFX_BASE64: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PFX_PASSWORD }}
+          CODESIGN_TIMESTAMP_URL: ${{ vars.CODESIGN_TIMESTAMP_URL }}
+        run: >
+          ./scripts/sign-windows-artifact.ps1
+          -ArtifactDir "${env:RUNNER_TEMP}\telemetry-lab-winui"
+          -AdditionalTargets "${env:APP_EXE}"
+          -RequireCertificate
+
+      - name: Create SHA256 checksums
+        shell: pwsh
+        run: |
+          $checksumPath = "${env:RUNNER_TEMP}\TelemetryLab.WinUI-win-x64.sha256.txt"
+          Get-FileHash -Algorithm SHA256 -LiteralPath "${env:APP_ZIP}", "${env:APP_EXE}" |
+            Sort-Object Path |
+            ForEach-Object { "$($_.Hash)  $($_.Path)" } |
+            Set-Content -LiteralPath $checksumPath -Encoding ASCII
+          "APP_SHA256=$checksumPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Create NuGet package for GitHub Packages
         shell: pwsh
         run: |
@@ -90,6 +123,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $toolsRoot | Out-Null
           Copy-Item -LiteralPath "${env:APP_ZIP}" -Destination (Join-Path $toolsRoot "TelemetryLab.WinUI-win-x64.zip")
           Copy-Item -LiteralPath "${env:APP_EXE}" -Destination (Join-Path $toolsRoot "TelemetryLab.WinUI-win-x64.exe")
+          Copy-Item -LiteralPath "${env:APP_SHA256}" -Destination (Join-Path $toolsRoot "TelemetryLab.WinUI-win-x64.sha256.txt")
 
           $repositoryUrl = "https://github.com/${{ github.repository }}"
           $nuspec = @"
@@ -107,6 +141,7 @@ jobs:
             <files>
               <file src="tools\win-x64\TelemetryLab.WinUI-win-x64.zip" target="tools\win-x64" />
               <file src="tools\win-x64\TelemetryLab.WinUI-win-x64.exe" target="tools\win-x64" />
+              <file src="tools\win-x64\TelemetryLab.WinUI-win-x64.sha256.txt" target="tools\win-x64" />
             </files>
           </package>
           "@
@@ -131,6 +166,7 @@ jobs:
           path: |
             ${{ env.APP_ZIP }}
             ${{ env.APP_EXE }}
+            ${{ env.APP_SHA256 }}
           if-no-files-found: error
 
       - name: Publish to GitHub Packages

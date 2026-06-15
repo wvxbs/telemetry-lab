@@ -87,18 +87,36 @@ jobs:
           ./scripts/sign-windows-artifact.ps1
           -ArtifactDir "${env:ARTIFACT_DIR}"
           -AdditionalTargets "${env:SFX_EXE}"
+          -RequireCertificate
+
+      - name: Create SHA256 checksums
+        shell: pwsh
+        run: |
+          $hashes = @()
+          $hashes += Get-FileHash -Algorithm SHA256 -LiteralPath "${env:SFX_EXE}"
+          Get-ChildItem -LiteralPath "${env:ARTIFACT_DIR}" -Recurse -File | ForEach-Object {
+            $hashes += Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName
+          }
+          $hashes |
+            Sort-Object Path |
+            ForEach-Object { "$($_.Hash)  $($_.Path)" } |
+            Set-Content -LiteralPath "artifacts/${env:ARTIFACT_NAME}.sha256.txt" -Encoding ASCII
 
       - name: Upload WinUI artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}
-          path: ${{ env.ARTIFACT_DIR }}/**
+          path: |
+            ${{ env.ARTIFACT_DIR }}/**
+            artifacts/${{ env.ARTIFACT_NAME }}.sha256.txt
 
       - name: Upload single-file launcher
         uses: actions/upload-artifact@v4
         with:
           name: TelemetryLab-WinUI3-windows-x64-exe
-          path: ${{ env.SFX_EXE }}
+          path: |
+            ${{ env.SFX_EXE }}
+            artifacts/${{ env.ARTIFACT_NAME }}.sha256.txt
           if-no-files-found: error
 
       - name: Create release archive
@@ -117,3 +135,4 @@ jobs:
           files: |
             artifacts/${{ env.ARTIFACT_NAME }}.zip
             ${{ env.SFX_EXE }}
+            artifacts/${{ env.ARTIFACT_NAME }}.sha256.txt
