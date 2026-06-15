@@ -95,14 +95,14 @@ jobs:
           CODESIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PFX_PASSWORD }}
           CODESIGN_TIMESTAMP_URL: ${{ vars.CODESIGN_TIMESTAMP_URL }}
         run: |
-          $args = @(
-            "-ArtifactDir", "${env:ARTIFACT_DIR}",
-            "-AdditionalTargets", "${env:SFX_EXE}"
-          )
-          if ("${env:REQUIRE_CODESIGN}" -eq "true") {
-            $args += "-RequireCertificate"
+          $signParams = @{
+            ArtifactDir = "${env:ARTIFACT_DIR}"
+            AdditionalTargets = @("${env:SFX_EXE}")
           }
-          ./scripts/sign-windows-artifact.ps1 @args
+          if ("${env:REQUIRE_CODESIGN}" -eq "true") {
+            $signParams.RequireCertificate = $true
+          }
+          ./scripts/sign-windows-artifact.ps1 @signParams
 
       - name: Create SHA256 checksums
         shell: pwsh
