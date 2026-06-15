@@ -35,7 +35,13 @@ from telemetry_lab.report_service import (
     csv_files_in_path,
     report_for_temperature_unit,
 )
-from telemetry_lab.report_views import render_fps_view, render_glossary_view, render_power_view, render_temperature_view
+from telemetry_lab.report_views import (
+    render_fps_view,
+    render_gaming_view,
+    render_glossary_view,
+    render_power_view,
+    render_temperature_view,
+)
 from telemetry_lab.text_utils import category_for_metric, pretty_token, repair_mojibake, slugify
 from telemetry_lab.units import normalize_temperature_unit
 
@@ -455,7 +461,17 @@ def main() -> None:
 
     view = st.radio(
         "Navegacao principal",
-        [tr("report"), tr("power"), tr("temperatures"), tr("frames"), tr("compare"), tr("benchmarks"), tr("custom_chart"), tr("glossary")],
+        [
+            tr("report"),
+            tr("gaming"),
+            tr("power"),
+            tr("temperatures"),
+            tr("frames"),
+            tr("compare"),
+            tr("benchmarks"),
+            tr("custom_chart"),
+            tr("glossary"),
+        ],
         horizontal=True,
         label_visibility="collapsed",
         key="main_view",
@@ -466,6 +482,12 @@ def main() -> None:
             render_report(display_report(report))
         else:
             st.info(tr("no_report"))
+    elif view == tr("gaming"):
+        st.subheader(tr("gaming"))
+        reports = load_many_reports_widget("gaming_reports", "")
+        if not reports and report:
+            reports = [report]
+        render_gaming_view([display_report(item) for item in reports])
     elif view == tr("power"):
         st.subheader(tr("power"))
         reports = load_many_reports_widget("power_reports", "")

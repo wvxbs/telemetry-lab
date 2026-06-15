@@ -75,7 +75,8 @@ def is_cpu_metric(name: str) -> bool:
 
 
 def is_gpu_metric(name: str) -> bool:
-    return "gpu" in ascii_fold(name)
+    low = ascii_fold(name)
+    return "gpu" in low or "video" in low or "graphics" in low
 
 
 def is_system_metric(name: str) -> bool:
@@ -99,6 +100,60 @@ def metric_group(name: str) -> str:
     if any(term in ascii_fold(name) for term in ("memory", "memoria", "ram", "vram")):
         return "Memoria"
     return "Outros"
+
+
+def is_voltage_metric(name: str) -> bool:
+    low = ascii_fold(name)
+    return "[v]" in low or "voltage" in low or "tensao" in low or "vdd" in low
+
+
+def is_unavailable_memory_metric(name: str) -> bool:
+    low = ascii_fold(name)
+    return "disponivel" in low or "available" in low or "free" in low
+
+
+def is_vram_metric(name: str) -> bool:
+    low = ascii_fold(name)
+    if is_voltage_metric(name) or is_unavailable_memory_metric(name):
+        return False
+    if any(term in low for term in ("clock", "relogio", "frequencia", "mhz", "ghz")):
+        return False
+    return (
+        "vram" in low
+        or "memoria gpu" in low
+        or "gpu memory" in low
+        or "memoria dedicada gpu" in low
+        or "dedicated gpu memory" in low
+        or ("memoria dedicada" in low and is_gpu_metric(name))
+    )
+
+
+def is_ram_metric(name: str) -> bool:
+    low = ascii_fold(name)
+    if is_unavailable_memory_metric(name):
+        return False
+    has_ram_term = low == "ram" or low.startswith("ram ") or " ram " in low or "[ram]" in low
+    return not is_vram_metric(name) and (
+        has_ram_term
+        or any(term in low for term in ("memoria fisica", "physical memory", "memory load", "carga da memoria"))
+    )
+
+
+def is_memory_temperature_metric(name: str) -> bool:
+    low = ascii_fold(name)
+    return is_temperature_metric(name) and any(
+        term in low for term in ("memoria", "memory", "vram", "junction", "spd hub")
+    )
+
+
+def is_gpu_load_metric(name: str) -> bool:
+    low = ascii_fold(name)
+    return is_gpu_metric(name) and any(term in low for term in ("%", "load", "carga", "uso", "utilization"))
+
+
+def is_cpu_load_metric(name: str) -> bool:
+    low = ascii_fold(name)
+    return is_cpu_metric(name) and any(term in low for term in ("%", "load", "carga", "uso", "utilization"))
 
 
 def metric_component(name: str) -> str:
@@ -134,6 +189,34 @@ def describe_metric(name: str) -> MetricInfo:
     else:
         desc = "Sensor numerico preservado do HWiNFO para analise livre."
     return MetricInfo(name=name, category=group, description=desc, aliases=aliases)
+
+
+def metric_unit(name: str, temperature_unit: str = "C") -> str:
+    low = ascii_fold(name)
+    if is_temperature_metric(name):
+        return "°F" if temperature_unit == "F" or low.endswith(" f") or "[f]" in low else "°C"
+    if is_fps_metric(name):
+        return "FPS"
+    if is_power_metric(name):
+        return "W"
+    if "%" in name or any(term in low for term in ("load", "carga", "uso", "utilization")):
+        return "%"
+    if "mhz" in low:
+        return "MHz"
+    if "ghz" in low:
+        return "GHz"
+    if "rpm" in low:
+        return "RPM"
+    if "[gb]" in low or low.endswith(" gb"):
+        return "GB"
+    if "[mb]" in low or low.endswith(" mb"):
+        return "MB"
+    bracket_start = name.rfind("[")
+    bracket_end = name.rfind("]")
+    if bracket_start >= 0 and bracket_end > bracket_start:
+        unit = name[bracket_start + 1 : bracket_end].strip()
+        return unit or "-"
+    return "-"
 
 
 def redundancy_frame(columns: list[str]) -> pd.DataFrame:
@@ -185,6 +268,65 @@ def ranked_metrics(columns: list[str], predicate, preferred: tuple[str, ...] = (
         return (len(preferred_folded), low)
 
     return sorted([col for col in columns if predicate(col)], key=score)
+
+
+def rank_gpu_power_metric(name: str) -> int:
+    low = ascii_fold(name)
+    if low.startswith("gpu consumo de energia") or low.startswith("gpu power") or "gpu total power" in low:
+        return 0
+    if "total board power" in low or "tbp" in low or "tgp" in low:
+        return 1
+    if "8-pin" in low or "entrada de energia gpu" in low:
+        return 4
+    if "linhas gpu" in low:
+        return 5
+    if "fonte pp" in low:
+        return 20
+    if "nvvdd" in low or "restante do chip" in low or "system agent" in low:
+        return 30
+    return 10
+
+
+def rank_vram_metric(name: str) -> int:
+    low = ascii_fold(name)
+    if is_unavailable_memory_metric(name):
+        return 100
+    if "memoria dedicada gpu d3d" in low or "dedicated gpu d3d" in low:
+        return 0
+    if "memoria gpu alocada" in low or "gpu memory allocated" in low or "allocated gpu memory" in low:
+        return 1
+    if "memoria dedicada gpu" in low or "dedicated gpu memory" in low:
+        return 2
+    if ("vram" in low or "gpu memory" in low) and ("[mb]" in low or "[gb]" in low):
+        return 3
+    if "uso de memoria gpu" in low or "gpu memory usage" in low or "vram usage" in low:
+        return 20
+    if "memoria dinamica gpu" in low or "dynamic gpu memory" in low:
+        return 40
+    return 50
+
+
+def rank_gaming_metric(name: str) -> int:
+    low = ascii_fold(name)
+    if is_fps_metric(name):
+        return 0
+    if is_gpu_metric(name) and is_power_metric(name):
+        return 1 + rank_gpu_power_metric(name)
+    if is_gpu_metric(name) and is_temperature_metric(name):
+        return 20
+    if is_cpu_metric(name) and is_temperature_metric(name):
+        return 21
+    if is_vram_metric(name):
+        return 30 + rank_vram_metric(name)
+    if is_ram_metric(name):
+        return 31
+    if is_gpu_load_metric(name):
+        return 40
+    if is_cpu_load_metric(name):
+        return 41
+    if is_memory_temperature_metric(name):
+        return 50
+    return 90
 
 
 def power_metrics(columns: list[str]) -> list[str]:
@@ -252,6 +394,29 @@ def curated_power_metrics(columns: list[str], include_extra: bool = False) -> li
     if include_extra:
         curated.extend([col for col in power_metrics(columns) if col not in curated][:8])
     return curated
+
+
+def curated_gaming_metrics(columns: list[str], include_extra: bool = False) -> list[str]:
+    primary = [
+        col
+        for col in columns
+        if (
+            is_fps_metric(col)
+            or is_gpu_load_metric(col)
+            or is_cpu_load_metric(col)
+            or is_vram_metric(col)
+            or is_ram_metric(col)
+            or is_memory_temperature_metric(col)
+            or (is_gpu_metric(col) and is_temperature_metric(col))
+            or (is_cpu_metric(col) and is_temperature_metric(col))
+            or (is_gpu_metric(col) and is_power_metric(col))
+        )
+        and not is_voltage_metric(col)
+    ]
+    ranked = sorted(primary, key=lambda col: (rank_gaming_metric(col), ascii_fold(col)))
+    if include_extra:
+        return ranked
+    return ranked[:24]
 
 
 def curated_temperature_metrics(columns: list[str], include_extra: bool = False) -> list[str]:

@@ -6,6 +6,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from telemetry_lab.metrics import metric_unit
 from telemetry_lab.models import Report
 
 
@@ -31,8 +32,8 @@ def render_chart(report: Report, chart_type: str, x_axis: str, y_axis: list[str]
             alt.Chart(corr)
             .mark_rect()
             .encode(
-                x=alt.X("index:N", title=""),
-                y=alt.Y("variable:N", title=""),
+                x=alt.X("index:N", title="Métrica"),
+                y=alt.Y("variable:N", title="Métrica"),
                 color=alt.Color("value:Q", scale=alt.Scale(scheme="redblue", domain=[-1, 1])),
                 tooltip=["index", "variable", alt.Tooltip("value:Q", format=".3f")],
             )
@@ -41,9 +42,15 @@ def render_chart(report: Report, chart_type: str, x_axis: str, y_axis: list[str]
         st.altair_chart(chart, width="stretch")
         return
     long = data.melt(id_vars=[x_axis], value_vars=y_axis, var_name="Metric", value_name="Value").dropna()
+    y_units = sorted({metric_unit(metric) for metric in y_axis})
+    y_title = "Valor" if len(y_units) != 1 or y_units[0] == "-" else f"Valor ({y_units[0]})"
+    x_title = "Tempo" if x_axis == "time" else f"{x_axis} ({metric_unit(x_axis)})"
     base = alt.Chart(long).encode(
-        x=alt.X(f"{x_axis}:T" if x_axis == "time" and pd.api.types.is_datetime64_any_dtype(long[x_axis]) else f"{x_axis}:Q"),
-        y=alt.Y("Value:Q"),
+        x=alt.X(
+            f"{x_axis}:T" if x_axis == "time" and pd.api.types.is_datetime64_any_dtype(long[x_axis]) else f"{x_axis}:Q",
+            title=x_title,
+        ),
+        y=alt.Y("Value:Q", title=y_title),
         color="Metric:N",
         tooltip=[x_axis, "Metric", alt.Tooltip("Value:Q", format=".2f")],
     )

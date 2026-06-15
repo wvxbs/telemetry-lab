@@ -118,6 +118,14 @@ Open the dashboard at <http://localhost:8501>. Choose the CSV in the browser, th
 
 No volume is required for normal use.
 
+## Streamlit Documentation
+
+This branch is the Streamlit/Docker version of Telemetry Lab. Use it when you want the browser workflow, container deployment, browser uploads/downloads, and the `localhost:8501` dashboard.
+
+Detailed Streamlit documentation: [docs/STREAMLIT_APP.md](docs/STREAMLIT_APP.md).
+
+The Streamlit view now follows the same focused product shape as the native Windows app: a gaming dashboard for FPS, 1%/0.1% lows, CPU/GPU power and temperatures, VRAM/RAM, chart axes with units, plus the full exploratory statistics and custom charts when you need to dig deeper.
+
 ## Optional Mounted Reports
 
 Mounting reports is optional. Use it only for very large files, repeated comparisons, or live reload from a CSV that is still being written.

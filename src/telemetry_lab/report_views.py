@@ -9,14 +9,29 @@ import streamlit as st
 from telemetry_lab.analysis import stats_frame
 from telemetry_lab.metrics import (
     battery_metrics,
+    curated_gaming_metrics,
     curated_power_metrics,
     curated_temperature_metrics,
     estimated_system_power,
     fps_metrics,
     glossary_frame,
+    is_cpu_load_metric,
+    is_cpu_metric,
     metric_group,
     metric_label,
+    metric_unit,
     redundancy_frame,
+    is_fps_metric,
+    is_gpu_load_metric,
+    is_gpu_metric,
+    is_memory_temperature_metric,
+    is_power_metric,
+    is_ram_metric,
+    is_temperature_metric,
+    is_vram_metric,
+    rank_gaming_metric,
+    rank_gpu_power_metric,
+    rank_vram_metric,
 )
 from telemetry_lab.models import Report
 
@@ -57,8 +72,11 @@ def metric_summary(reports: list[Report], metrics_by_report: dict[str, list[str]
                     "Report": label,
                     "Metric": metric,
                     "Avg": clean.mean(),
+                    "1%": clean.quantile(0.01),
+                    "0.1%": clean.quantile(0.001),
                     "P95": clean.quantile(0.95),
                     "Max": clean.max(),
+                    "Last": clean.iloc[-1],
                     "Samples": int(clean.count()),
                 }
             )
@@ -70,12 +88,14 @@ def render_metric_chart(data: pd.DataFrame, height: int = 380) -> None:
         st.info("Nenhuma metrica compativel foi detectada.")
         return
     x_type = "time:T" if pd.api.types.is_datetime64_any_dtype(data["time"]) else "time:Q"
+    units = sorted({metric_unit(metric) for metric in data["Metric"].dropna().unique()})
+    y_title = "Valor" if len(units) != 1 or units[0] == "-" else f"Valor ({units[0]})"
     chart = (
         alt.Chart(data)
         .mark_line()
         .encode(
-            x=alt.X(x_type, title=""),
-            y=alt.Y("Value:Q", title=""),
+            x=alt.X(x_type, title="Tempo" if x_type == "time:T" else "Amostra"),
+            y=alt.Y("Value:Q", title=y_title),
             color="Metric:N",
             strokeDash="Report:N",
             tooltip=["Report", "Metric", "time", alt.Tooltip("Value:Q", format=".2f")],
@@ -84,6 +104,131 @@ def render_metric_chart(data: pd.DataFrame, height: int = 380) -> None:
         .interactive()
     )
     st.altair_chart(chart, width="stretch")
+
+
+def _clean_stats(series: pd.Series) -> dict[str, float | int]:
+    clean = series.dropna()
+    if clean.empty:
+        return {"samples": 0}
+    return {
+        "avg": float(clean.mean()),
+        "p1": float(clean.quantile(0.01)),
+        "p01": float(clean.quantile(0.001)),
+        "p95": float(clean.quantile(0.95)),
+        "min": float(clean.min()),
+        "max": float(clean.max()),
+        "last": float(clean.iloc[-1]),
+        "samples": int(clean.count()),
+    }
+
+
+def _format_value(value: float | int | None, unit: str) -> str:
+    if value is None:
+        return "-"
+    formatted = f"{float(value):,.0f}" if abs(float(value)) >= 100 else f"{float(value):,.1f}"
+    formatted = formatted.replace(",", "X").replace(".", ",").replace("X", ".")
+    return formatted if unit == "-" else f"{formatted} {unit}"
+
+
+def _best_metric(report: Report, predicate, ranker=None) -> str | None:
+    ranker = ranker or (lambda name: 0)
+    candidates = [col for col in report.numeric.columns if predicate(col)]
+    candidates = sorted(candidates, key=lambda col: (ranker(col), col.casefold()))
+    return candidates[0] if candidates else None
+
+
+def _highlight_card(label: str, report: Report, metric: str | None, value_key: str = "last") -> None:
+    if not metric or metric not in report.numeric.columns:
+        st.metric(label, "-")
+        return
+    stats = _clean_stats(report.numeric[metric])
+    unit = metric_unit(metric)
+    value = stats.get(value_key)
+    delta = None
+    if stats.get("samples", 0):
+        delta = f"Média: {_format_value(stats.get('avg'), unit)}"
+    st.metric(label, _format_value(value, unit), delta=delta, help=metric)
+
+
+def _filtered_fps_series(series: pd.Series, min_fps: float, max_fps: float) -> pd.Series:
+    clean = series.dropna()
+    return clean[(clean >= min_fps) & (clean <= max_fps)]
+
+
+def render_gaming_view(reports: list[Report]) -> None:
+    if not reports:
+        st.info("Carregue ao menos um relatorio.")
+        return
+    left, right = st.columns(2)
+    min_fps = left.number_input("FPS minimo valido", min_value=0.0, value=30.0, step=5.0, key="gaming_min_fps")
+    max_fps = right.number_input("FPS maximo valido", min_value=1.0, value=1000.0, step=10.0, key="gaming_max_fps")
+
+    for idx, report in enumerate(reports, start=1):
+        if len(reports) > 1:
+            st.markdown(f"### {report_label(report, f'R{idx}')}")
+        fps = _best_metric(report, is_fps_metric)
+        gpu_power = _best_metric(report, lambda col: is_gpu_metric(col) and is_power_metric(col), rank_gpu_power_metric)
+        gpu_temp = _best_metric(report, lambda col: is_gpu_metric(col) and is_temperature_metric(col))
+        cpu_temp = _best_metric(report, lambda col: is_cpu_metric(col) and is_temperature_metric(col))
+        gpu_load = _best_metric(report, is_gpu_load_metric, rank_gaming_metric)
+        cpu_load = _best_metric(report, is_cpu_load_metric, rank_gaming_metric)
+        vram = _best_metric(report, is_vram_metric, rank_vram_metric)
+        ram = _best_metric(report, is_ram_metric, rank_gaming_metric)
+        memory_temp = _best_metric(report, is_memory_temperature_metric, rank_gaming_metric)
+
+        cards = st.columns(4)
+        if fps and fps in report.numeric.columns:
+            filtered = _filtered_fps_series(report.numeric[fps], min_fps, max_fps)
+            fps_stats = _clean_stats(filtered)
+            cards[0].metric("FPS atual", _format_value(_clean_stats(report.numeric[fps]).get("last"), "FPS"), help=fps)
+            cards[1].metric("FPS medio", _format_value(fps_stats.get("avg"), "FPS"), help=f"{fps} filtrado")
+            cards[2].metric("1% low", _format_value(fps_stats.get("p1"), "FPS"), help=f"{fps} filtrado")
+            cards[3].metric("0.1% low", _format_value(fps_stats.get("p01"), "FPS"), help=f"{fps} filtrado")
+        else:
+            for col, label in zip(cards, ["FPS atual", "FPS medio", "1% low", "0.1% low"]):
+                col.metric(label, "-")
+
+        cards = st.columns(5)
+        with cards[0]:
+            _highlight_card("Potencia GPU", report, gpu_power)
+        with cards[1]:
+            _highlight_card("Temp. GPU", report, gpu_temp)
+        with cards[2]:
+            _highlight_card("Temp. CPU", report, cpu_temp)
+        with cards[3]:
+            _highlight_card("Uso GPU", report, gpu_load)
+        with cards[4]:
+            _highlight_card("Uso CPU", report, cpu_load)
+
+        cards = st.columns(4)
+        with cards[0]:
+            _highlight_card("VRAM dedicada/alocada", report, vram)
+        with cards[1]:
+            _highlight_card("RAM", report, ram)
+        with cards[2]:
+            _highlight_card("Temp. memoria", report, memory_temp)
+        with cards[3]:
+            samples = len(report.df)
+            st.metric("Amostras", f"{samples:,}".replace(",", "."))
+
+        metrics = curated_gaming_metrics(list(report.numeric.columns), include_extra=True)
+        visible = metric_summary([report], {report.source: metrics})
+        if not visible.empty:
+            st.dataframe(visible, width="stretch", hide_index=True)
+        chart_metrics = [metric for metric in [fps, gpu_power, gpu_temp, cpu_temp, gpu_load, vram, ram] if metric]
+        chart_metrics.extend([metric for metric in metrics if metric not in chart_metrics][: max(0, 8 - len(chart_metrics))])
+        render_metric_chart(long_metric_frame([report], {report.source: chart_metrics}), height=320)
+
+        if fps and fps in report.numeric.columns:
+            key_cols = [col for col in metrics if col != fps and col in report.numeric.columns][:32]
+            base = report.numeric[[fps] + key_cols].copy()
+            base = base[(base[fps] >= min_fps) & (base[fps] <= max_fps)]
+            corr = base.corr(numeric_only=True)[fps].drop(labels=[fps], errors="ignore").dropna()
+            if not corr.empty:
+                st.markdown("#### Correlacao com FPS")
+                corr_df = corr.abs().sort_values(ascending=False).head(12).rename("Abs correlation").reset_index()
+                corr_df = corr_df.rename(columns={"index": "Metric"})
+                st.dataframe(corr_df, width="stretch", hide_index=True)
 
 
 def render_power_view(reports: list[Report]) -> None:
