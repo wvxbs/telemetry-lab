@@ -217,6 +217,7 @@ public sealed partial class MainWindow : Window
         side.Children.Add(BuildLiveReloadStateRow());
 
         side.Children.Add(BuildNavItem("\uE9D2", "Relatório", T("report")));
+        side.Children.Add(BuildNavItem("\uE7FC", "Jogos", T("gaming")));
         side.Children.Add(BuildNavItem("\uE945", "Potência", T("power")));
         side.Children.Add(BuildNavItem("\uE9CA", "Temperaturas", T("temperatures")));
         side.Children.Add(BuildNavItem("\uE7C1", "Quadros", T("frames")));
@@ -326,6 +327,9 @@ public sealed partial class MainWindow : Window
         MainSurface.Children.Add(BuildKpiRow());
         switch (_section)
         {
+            case "Jogos":
+                MainSurface.Children.Add(BuildGamingSection());
+                break;
             case "Potência":
                 MainSurface.Children.Add(BuildMetricSection("Potência", T("power_subtitle")));
                 break;
@@ -405,7 +409,7 @@ public sealed partial class MainWindow : Window
         {
             BuildHighlightMetric(T("fps_now"), "\uE7C1", m => CsvTelemetryService.IsFpsMetric(m.Name)),
             BuildHighlightMetric(T("cpu_power_now"), "\uE950", m => IsCpuMetric(m.Name) && CsvTelemetryService.IsPowerMetric(m.Name)),
-            BuildHighlightMetric(T("gpu_power_now"), "\uE7F4", m => IsGpuMetric(m.Name) && CsvTelemetryService.IsPowerMetric(m.Name)),
+            BuildHighlightMetric(T("gpu_power_now"), "\uE7F4", m => IsGpuMetric(m.Name) && CsvTelemetryService.IsPowerMetric(m.Name), RankGpuPowerMetric),
             BuildHighlightMetric(T("system_power_now"), "\uE945", m => IsSystemPowerMetric(m.Name)),
             BuildHighlightMetric(T("cpu_temp_now"), "\uE9CA", m => IsCpuMetric(m.Name) && CsvTelemetryService.IsTemperatureMetric(m.Name)),
             BuildHighlightMetric(T("gpu_temp_now"), "\uE9CA", m => IsGpuMetric(m.Name) && CsvTelemetryService.IsTemperatureMetric(m.Name))
@@ -420,48 +424,30 @@ public sealed partial class MainWindow : Window
             return new TextBlock { Text = T("quick_look_empty"), Opacity = 0.72 };
         }
 
-        var grid = new Grid
-        {
-            ColumnSpacing = 10,
-            RowSpacing = 10
-        };
         var columns = _detailLevel == "Essencial" ? 4 : 3;
-        for (var i = 0; i < columns; i++)
-        {
-            grid.ColumnDefinitions.Add(new ColumnDefinition());
-        }
-        for (var i = 0; i < Math.Ceiling(metrics.Count / (double)columns); i++)
-        {
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        }
-
-        for (var i = 0; i < metrics.Count; i++)
-        {
-            var card = BuildHighlightCard(metrics[i]);
-            Grid.SetColumn(card, i % columns);
-            Grid.SetRow(card, i / columns);
-            grid.Children.Add(card);
-        }
-
-        return grid;
+        return BuildHighlightGrid(metrics, columns);
     }
 
-    private HighlightMetric? BuildHighlightMetric(string label, string glyph, Func<MetricSummary, bool> predicate)
+    private HighlightMetric? BuildHighlightMetric(string label, string glyph, Func<MetricSummary, bool> predicate, Func<string, int>? rank = null)
     {
-        var metric = _report.Summaries
-            .Where(predicate)
-            .OrderBy(metric => RankHighlightMetric(metric.Name))
-            .ThenBy(metric => metric.Name, StringComparer.CurrentCultureIgnoreCase)
-            .FirstOrDefault();
+        var metric = FindMetric(predicate, rank);
         if (metric is null)
         {
             return null;
         }
 
-        var value = DisplayValue(metric.Name, metric.Last);
-        var average = DisplayValue(metric.Name, metric.Average);
+        return BuildHighlightFromMetric(label, glyph, metric, metric.Last, metric.Average);
+    }
+
+    private HighlightMetric BuildHighlightFromMetric(string label, string glyph, MetricSummary metric, double value, double comparison)
+    {
         var unit = UnitForMetric(metric.Name);
-        return new HighlightMetric(label, glyph, metric.Name, FormatHighlightValue(value, unit), $"{T("avg")}: {FormatHighlightValue(average, unit)}");
+        return new HighlightMetric(
+            label,
+            glyph,
+            metric.Name,
+            FormatHighlightValue(DisplayValue(metric.Name, value), unit),
+            $"{T("avg")}: {FormatHighlightValue(DisplayValue(metric.Name, comparison), unit)}");
     }
 
     private Border BuildHighlightCard(HighlightMetric metric)
@@ -531,6 +517,108 @@ public sealed partial class MainWindow : Window
         }
 
         return BuildCard(panel);
+    }
+
+    private UIElement BuildGamingSection()
+    {
+        var panel = BuildCardStack(T("gaming"), T("gaming_subtitle"));
+        var highlights = BuildGamingHighlights();
+        if (highlights.Count == 0)
+        {
+            panel.Children.Add(new TextBlock { Text = T("no_metric"), Opacity = 0.72, TextWrapping = TextWrapping.Wrap });
+            return BuildCard(panel);
+        }
+
+        panel.Children.Add(BuildHighlightGrid(highlights, _detailLevel == "Essencial" ? 4 : 3));
+
+        var important = BuildGamingMetricList().ToList();
+        if (important.Count > 0)
+        {
+            panel.Children.Add(BuildMetricTable(FilterMetrics(important).Take(_detailLevel == "Completo" ? 32 : 18)));
+            var chartMetric = important.FirstOrDefault(metric => CsvTelemetryService.IsFpsMetric(metric.Name)) ?? important[0];
+            panel.Children.Add(BuildChart(chartMetric.Name, _chartType));
+        }
+
+        return BuildCard(panel);
+    }
+
+    private IReadOnlyList<HighlightMetric> BuildGamingHighlights()
+    {
+        var cards = new List<HighlightMetric>();
+        var fps = FindMetric(metric => CsvTelemetryService.IsFpsMetric(metric.Name), RankHighlightMetric);
+        if (fps is not null)
+        {
+            var filtered = BuildFilteredSummary(fps.Name, _fpsMinimum, _fpsMaximum);
+            if (filtered.Samples > 0)
+            {
+                cards.Add(BuildHighlightFromMetric(T("fps_now"), "\uE7C1", fps, fps.Last, filtered.Average));
+                cards.Add(BuildHighlightFromMetric(T("fps_avg"), "\uE9D2", filtered, filtered.Average, filtered.Last));
+                cards.Add(BuildHighlightFromMetric(T("fps_1_low"), "\uE74B", filtered, filtered.P1, filtered.Average));
+                cards.Add(BuildHighlightFromMetric(T("fps_01_low"), "\uE74B", filtered, filtered.P01, filtered.Average));
+            }
+        }
+
+        AddCard(cards, T("gpu_power_now"), "\uE7F4", metric => IsGpuMetric(metric.Name) && CsvTelemetryService.IsPowerMetric(metric.Name), RankGpuPowerMetric);
+        AddCard(cards, T("gpu_temp_now"), "\uE9CA", metric => IsGpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name), RankHighlightMetric);
+        AddCard(cards, T("cpu_temp_now"), "\uE9CA", metric => IsCpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name), RankHighlightMetric);
+        AddCard(cards, T("gpu_usage"), "\uE7F4", IsGpuLoadMetric, RankGamingMetric);
+        AddCard(cards, T("cpu_usage"), "\uE950", IsCpuLoadMetric, RankGamingMetric);
+        AddCard(cards, T("vram_usage"), "\uE8A7", IsVramMetric, RankGamingMetric);
+        AddCard(cards, T("ram_usage"), "\uE8A7", IsRamMetric, RankGamingMetric);
+        AddCard(cards, T("memory_temp"), "\uE9CA", IsMemoryTemperatureMetric, RankGamingMetric);
+        return cards;
+    }
+
+    private void AddCard(ICollection<HighlightMetric> cards, string label, string glyph, Func<MetricSummary, bool> predicate, Func<string, int> rank)
+    {
+        var card = BuildHighlightMetric(label, glyph, predicate, rank);
+        if (card is not null)
+        {
+            cards.Add(card);
+        }
+    }
+
+    private IEnumerable<MetricSummary> BuildGamingMetricList()
+    {
+        return _report.Summaries
+            .Where(metric =>
+                CsvTelemetryService.IsFpsMetric(metric.Name) ||
+                IsGpuLoadMetric(metric) ||
+                IsCpuLoadMetric(metric) ||
+                IsVramMetric(metric) ||
+                IsRamMetric(metric) ||
+                IsMemoryTemperatureMetric(metric) ||
+                (IsGpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name)) ||
+                (IsCpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name)) ||
+                (IsGpuMetric(metric.Name) && CsvTelemetryService.IsPowerMetric(metric.Name)))
+            .Where(metric => !IsVoltageMetric(metric.Name))
+            .OrderBy(metric => RankGamingMetric(metric.Name))
+            .ThenBy(metric => metric.Name, StringComparer.CurrentCultureIgnoreCase);
+    }
+
+    private UIElement BuildHighlightGrid(IReadOnlyList<HighlightMetric> metrics, int columns)
+    {
+        var grid = new Grid
+        {
+            ColumnSpacing = 10,
+            RowSpacing = 10
+        };
+        for (var i = 0; i < columns; i++)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+        }
+        for (var i = 0; i < Math.Ceiling(metrics.Count / (double)columns); i++)
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+        for (var i = 0; i < metrics.Count; i++)
+        {
+            var card = BuildHighlightCard(metrics[i]);
+            Grid.SetColumn(card, i % columns);
+            Grid.SetRow(card, i / columns);
+            grid.Children.Add(card);
+        }
+        return grid;
     }
 
     private UIElement BuildDataSection()
@@ -1046,6 +1134,17 @@ public sealed partial class MainWindow : Window
         return unit == "-" ? formatted : $"{formatted} {unit}";
     }
 
+    private MetricSummary? FindMetric(Func<MetricSummary, bool> predicate, Func<string, int>? rank = null)
+    {
+        var ranker = rank ?? RankHighlightMetric;
+        return _report.Summaries
+            .Where(predicate)
+            .Where(metric => !IsVoltageMetric(metric.Name))
+            .OrderBy(metric => ranker(metric.Name))
+            .ThenBy(metric => metric.Name, StringComparer.CurrentCultureIgnoreCase)
+            .FirstOrDefault();
+    }
+
     private double DisplayValue(string metricName, double value)
     {
         return _temperatureUnit == "F" && CsvTelemetryService.IsTemperatureMetric(metricName)
@@ -1100,6 +1199,59 @@ public sealed partial class MainWindow : Window
             (low.Contains("potencia total do sistema") || low.Contains("system total power") || low.Contains("system power"));
     }
 
+    private static bool IsGpuLoadMetric(MetricSummary metric)
+    {
+        var low = CsvTelemetryService.Fold(metric.Name);
+        return IsGpuMetric(metric.Name) && metric.Group == "Carga" &&
+            (low.Contains("uso") || low.Contains("load") || low.Contains("utilization") || low.Contains("%"));
+    }
+
+    private static bool IsCpuLoadMetric(MetricSummary metric)
+    {
+        var low = CsvTelemetryService.Fold(metric.Name);
+        return IsCpuMetric(metric.Name) && metric.Group == "Carga" &&
+            (low.Contains("uso") || low.Contains("load") || low.Contains("utilization") || low.Contains("%"));
+    }
+
+    private static bool IsVramMetric(MetricSummary metric)
+    {
+        var low = CsvTelemetryService.Fold(metric.Name);
+        return !IsVoltageMetric(metric.Name) &&
+            (low.Contains("vram") || low.Contains("memoria gpu") || low.Contains("gpu memory") || low.Contains("memoria dedicada"));
+    }
+
+    private static bool IsRamMetric(MetricSummary metric)
+    {
+        var low = CsvTelemetryService.Fold(metric.Name);
+        return metric.Group == "Memoria" && !IsVramMetric(metric) &&
+            (low.Contains("memoria fisica") || low.Contains("physical memory") || low.Contains("ram") || low.Contains("memory load") || low.Contains("carga da memoria"));
+    }
+
+    private static bool IsMemoryTemperatureMetric(MetricSummary metric)
+    {
+        var low = CsvTelemetryService.Fold(metric.Name);
+        return CsvTelemetryService.IsTemperatureMetric(metric.Name) &&
+            (low.Contains("memoria") || low.Contains("memory") || low.Contains("vram") || low.Contains("junction") || low.Contains("spd hub"));
+    }
+
+    private static bool IsVoltageMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        return low.Contains("[v]") || low.Contains("voltage") || low.Contains("tensao") || low.Contains("vdd");
+    }
+
+    private static int RankGpuPowerMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        if (low.StartsWith("gpu consumo de energia") || low.StartsWith("gpu power") || low.Contains("gpu total power")) return 0;
+        if (low.Contains("total board power") || low.Contains("tbp") || low.Contains("tgp")) return 1;
+        if (low.Contains("8-pin") || low.Contains("entrada de energia gpu")) return 4;
+        if (low.Contains("linhas gpu")) return 5;
+        if (low.Contains("fonte pp")) return 20;
+        if (low.Contains("nvvdd") || low.Contains("restante do chip") || low.Contains("system agent")) return 30;
+        return 10;
+    }
+
     private static int RankHighlightMetric(string name)
     {
         var low = CsvTelemetryService.Fold(name);
@@ -1109,6 +1261,21 @@ public sealed partial class MainWindow : Window
         if (low.Contains("framerate") || low.Contains("frame rate")) return 3;
         if (low.Contains("hotspot") || low.Contains("ponto quente")) return 4;
         return 10;
+    }
+
+    private static int RankGamingMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        if (CsvTelemetryService.IsFpsMetric(name)) return 0;
+        if (IsGpuMetric(name) && CsvTelemetryService.IsPowerMetric(name)) return 1 + RankGpuPowerMetric(name);
+        if (IsGpuMetric(name) && CsvTelemetryService.IsTemperatureMetric(name)) return 20;
+        if (IsCpuMetric(name) && CsvTelemetryService.IsTemperatureMetric(name)) return 21;
+        if (low.Contains("vram") || low.Contains("gpu memory") || low.Contains("memoria gpu")) return 30;
+        if (low.Contains("ram") || low.Contains("memoria fisica") || low.Contains("physical memory")) return 31;
+        if (IsGpuMetric(name) && (low.Contains("%") || low.Contains("load") || low.Contains("uso"))) return 40;
+        if (IsCpuMetric(name) && (low.Contains("%") || low.Contains("load") || low.Contains("uso"))) return 41;
+        if (IsMemoryTemperatureMetric(new MetricSummary(name, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return 50;
+        return 90;
     }
 
     private int OverviewMetricLimit() => _detailLevel switch
@@ -1196,6 +1363,7 @@ public sealed partial class MainWindow : Window
             "reload" => "Reload",
             "live_reload" => "Live reload",
             "report" => "Report",
+            "gaming" => "Gaming",
             "power" => "Power",
             "temperatures" => "Temperatures",
             "frames" => "Frames",
@@ -1228,13 +1396,22 @@ public sealed partial class MainWindow : Window
             "empty_body" => "The native app now keeps the common Streamlit analysis flow: stats, focused views, custom charts, glossary, language, units, live reload, and fullscreen.",
             "overview" => "Overview",
             "overview_subtitle" => "Curated summary of the main metric families.",
+            "gaming_subtitle" => "Real-time game-relevant signals: FPS, lows, power, thermals, RAM, VRAM, and utilization.",
             "quick_look_empty" => "No quick-look metric was detected in this report.",
             "fps_now" => "Current FPS",
+            "fps_avg" => "Average FPS",
+            "fps_1_low" => "1% low",
+            "fps_01_low" => "0.1% low",
             "cpu_power_now" => "CPU power",
             "gpu_power_now" => "GPU power",
             "system_power_now" => "System power",
             "cpu_temp_now" => "CPU temp",
             "gpu_temp_now" => "GPU temp",
+            "gpu_usage" => "GPU usage",
+            "cpu_usage" => "CPU usage",
+            "vram_usage" => "VRAM",
+            "ram_usage" => "RAM",
+            "memory_temp" => "Memory temp",
             "power_subtitle" => "Prioritized energy and power sensors.",
             "temperature_subtitle" => "Main component temperatures and hotspots.",
             "frames_subtitle" => "FPS statistics with valid range filtering.",
@@ -1300,6 +1477,7 @@ public sealed partial class MainWindow : Window
             "reload" => "Reler",
             "live_reload" => "Leitura dinâmica",
             "report" => "Relatório",
+            "gaming" => "Jogos",
             "power" => "Potência",
             "temperatures" => "Temperaturas",
             "frames" => "Quadros",
@@ -1332,13 +1510,22 @@ public sealed partial class MainWindow : Window
             "empty_body" => "O app nativo agora preserva o fluxo comum do Streamlit: estatísticas, visões focadas, gráfico customizado, glossário, idioma, unidades, live reload e tela cheia.",
             "overview" => "Visão geral",
             "overview_subtitle" => "Resumo curado das famílias principais.",
+            "gaming_subtitle" => "Sinais relevantes para jogos em tempo real: FPS, lows, potência, temperaturas, RAM, VRAM e uso.",
             "quick_look_empty" => "Nenhuma métrica de leitura rápida foi detectada neste relatório.",
             "fps_now" => "FPS atual",
+            "fps_avg" => "FPS médio",
+            "fps_1_low" => "1% baixo",
+            "fps_01_low" => "0.1% baixo",
             "cpu_power_now" => "Potência CPU",
             "gpu_power_now" => "Potência GPU",
             "system_power_now" => "Potência sistema",
             "cpu_temp_now" => "Temp. CPU",
             "gpu_temp_now" => "Temp. GPU",
+            "gpu_usage" => "Uso GPU",
+            "cpu_usage" => "Uso CPU",
+            "vram_usage" => "VRAM",
+            "ram_usage" => "RAM",
+            "memory_temp" => "Temp. memórias",
             "power_subtitle" => "Sensores de energia e consumo priorizados.",
             "temperature_subtitle" => "Temperaturas principais e hotspots.",
             "frames_subtitle" => "Estatísticas de FPS com filtro de faixa válida.",
