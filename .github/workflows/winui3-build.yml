@@ -28,6 +28,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Resolve signing policy
+        shell: pwsh
+        run: |
+          $require = '${{ github.ref }}' -eq 'refs/heads/main' -or '${{ startsWith(github.ref, 'refs/tags/v') }}' -eq 'true'
+          "REQUIRE_CODESIGN=$($require.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_ENV -Append
+          if ($require) {
+            Write-Host "Code signing is required for main/tag Windows artifacts."
+          } else {
+            Write-Warning "Code signing is optional for this development artifact. Windows may block unsigned executables."
+          }
+
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -83,11 +94,15 @@ jobs:
           CODESIGN_PFX_BASE64: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 }}
           CODESIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PFX_PASSWORD }}
           CODESIGN_TIMESTAMP_URL: ${{ vars.CODESIGN_TIMESTAMP_URL }}
-        run: >
-          ./scripts/sign-windows-artifact.ps1
-          -ArtifactDir "${env:ARTIFACT_DIR}"
-          -AdditionalTargets "${env:SFX_EXE}"
-          -RequireCertificate
+        run: |
+          $args = @(
+            "-ArtifactDir", "${env:ARTIFACT_DIR}",
+            "-AdditionalTargets", "${env:SFX_EXE}"
+          )
+          if ("${env:REQUIRE_CODESIGN}" -eq "true") {
+            $args += "-RequireCertificate"
+          }
+          ./scripts/sign-windows-artifact.ps1 @args
 
       - name: Create SHA256 checksums
         shell: pwsh

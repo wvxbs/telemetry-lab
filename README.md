@@ -133,7 +133,7 @@ tools/win-x64/TelemetryLab.WinUI-win-x64.zip
 
 Run the `.exe` directly for the lowest-friction experience. Extract the `.zip` on Windows and run `TelemetryLab.WinUI.exe` if you prefer to inspect or keep the full portable folder.
 
-Windows executables are Authenticode-signed by the CI before they are uploaded. Maintainers must configure `WINDOWS_CODESIGN_PFX_BASE64` and `WINDOWS_CODESIGN_PFX_PASSWORD` as repository or environment secrets; otherwise the Windows packaging job fails instead of publishing a blocked unsigned executable. Each artifact also includes a `*.sha256.txt` checksum file.
+Windows executables for `main`, version tags, and GitHub Packages are Authenticode-signed by the CI before they are uploaded. Maintainers must configure `WINDOWS_CODESIGN_PFX_BASE64` and `WINDOWS_CODESIGN_PFX_PASSWORD` as repository or environment secrets; otherwise release/package jobs fail instead of publishing a blocked unsigned executable. Feature-branch artifacts may be unsigned for testing and can still be blocked by Windows SmartScreen. Each artifact also includes a `*.sha256.txt` checksum file.
 
 You can keep using the extracted folder as a portable tool. To install it like a normal per-user Windows app, open the native app and use the **Installation** / **Instalação** page. It exposes the same per-user install, update, repair, and uninstall flow used by the package scripts.
 
