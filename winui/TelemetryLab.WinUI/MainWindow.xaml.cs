@@ -407,7 +407,7 @@ public sealed partial class MainWindow : Window
     {
         var metrics = new[]
         {
-            BuildHighlightMetric(T("fps_now"), "\uE7C1", m => CsvTelemetryService.IsFpsMetric(m.Name)),
+            BuildHighlightMetric(_liveReload ? T("fps_now") : T("fps_avg"), "\uE7C1", m => CsvTelemetryService.IsFpsMetric(m.Name)),
             BuildHighlightMetric(T("cpu_power_now"), "\uE950", m => IsCpuMetric(m.Name) && CsvTelemetryService.IsPowerMetric(m.Name)),
             BuildHighlightMetric(T("gpu_power_now"), "\uE7F4", m => IsGpuMetric(m.Name) && CsvTelemetryService.IsPowerMetric(m.Name), RankGpuPowerMetric),
             BuildHighlightMetric(T("system_power_now"), "\uE945", m => IsSystemPowerMetric(m.Name)),
@@ -436,10 +436,16 @@ public sealed partial class MainWindow : Window
             return null;
         }
 
-        return BuildHighlightFromMetric(label, glyph, metric, metric.Last, metric.Average);
+        return BuildHighlightFromMetric(label, glyph, metric, HighlightValue(metric), HighlightComparison(metric));
     }
 
-    private HighlightMetric BuildHighlightFromMetric(string label, string glyph, MetricSummary metric, double value, double comparison)
+    private HighlightMetric BuildHighlightFromMetric(
+        string label,
+        string glyph,
+        MetricSummary metric,
+        double value,
+        double comparison,
+        string? comparisonLabel = null)
     {
         var unit = UnitForMetric(metric.Name);
         return new HighlightMetric(
@@ -447,7 +453,62 @@ public sealed partial class MainWindow : Window
             glyph,
             metric.Name,
             FormatHighlightValue(DisplayValue(metric.Name, value), unit),
-            $"{T("avg")}: {FormatHighlightValue(DisplayValue(metric.Name, comparison), unit)}");
+            $"{comparisonLabel ?? HighlightComparisonLabel(metric)}: {FormatHighlightValue(DisplayValue(metric.Name, comparison), unit)}");
+    }
+
+    private double HighlightValue(MetricSummary metric)
+    {
+        if (_liveReload)
+        {
+            return metric.Last;
+        }
+
+        if (CsvTelemetryService.IsTemperatureMetric(metric.Name))
+        {
+            return metric.Maximum;
+        }
+
+        return metric.Average;
+    }
+
+    private double HighlightComparison(MetricSummary metric)
+    {
+        if (_liveReload)
+        {
+            return metric.Average;
+        }
+
+        if (CsvTelemetryService.IsTemperatureMetric(metric.Name))
+        {
+            return metric.Average;
+        }
+
+        if (CsvTelemetryService.IsFpsMetric(metric.Name))
+        {
+            return metric.P1;
+        }
+
+        return metric.Maximum;
+    }
+
+    private string HighlightComparisonLabel(MetricSummary metric)
+    {
+        if (_liveReload)
+        {
+            return T("avg");
+        }
+
+        if (CsvTelemetryService.IsTemperatureMetric(metric.Name))
+        {
+            return T("avg");
+        }
+
+        if (CsvTelemetryService.IsFpsMetric(metric.Name))
+        {
+            return "1%";
+        }
+
+        return T("max");
     }
 
     private Border BuildHighlightCard(HighlightMetric metric)
@@ -551,10 +612,18 @@ public sealed partial class MainWindow : Window
             var filtered = BuildFilteredSummary(fps.Name, _fpsMinimum, _fpsMaximum);
             if (filtered.Samples > 0)
             {
-                cards.Add(BuildHighlightFromMetric(T("fps_now"), "\uE7C1", fps, fps.Last, filtered.Average));
-                cards.Add(BuildHighlightFromMetric(T("fps_avg"), "\uE9D2", filtered, filtered.Average, filtered.Last));
-                cards.Add(BuildHighlightFromMetric(T("fps_1_low"), "\uE74B", filtered, filtered.P1, filtered.Average));
-                cards.Add(BuildHighlightFromMetric(T("fps_01_low"), "\uE74B", filtered, filtered.P01, filtered.Average));
+                if (_liveReload)
+                {
+                    cards.Add(BuildHighlightFromMetric(T("fps_now"), "\uE7C1", fps, fps.Last, filtered.Average));
+                    cards.Add(BuildHighlightFromMetric(T("fps_avg"), "\uE9D2", filtered, filtered.Average, filtered.Last, T("last")));
+                }
+                else
+                {
+                    cards.Add(BuildHighlightFromMetric(T("fps_avg"), "\uE9D2", filtered, filtered.Average, filtered.P1));
+                    cards.Add(BuildHighlightFromMetric(T("fps_max"), "\uE7C1", filtered, filtered.Maximum, filtered.Average, T("avg")));
+                }
+                cards.Add(BuildHighlightFromMetric(T("fps_1_low"), "\uE74B", filtered, filtered.P1, filtered.Average, T("avg")));
+                cards.Add(BuildHighlightFromMetric(T("fps_01_low"), "\uE74B", filtered, filtered.P01, filtered.Average, T("avg")));
             }
         }
 
@@ -1439,6 +1508,7 @@ public sealed partial class MainWindow : Window
             "quick_look_empty" => "No quick-look metric was detected in this report.",
             "fps_now" => "Current FPS",
             "fps_avg" => "Average FPS",
+            "fps_max" => "Max FPS",
             "fps_1_low" => "1% low",
             "fps_01_low" => "0.1% low",
             "cpu_power_now" => "CPU power",
@@ -1553,6 +1623,7 @@ public sealed partial class MainWindow : Window
             "quick_look_empty" => "Nenhuma métrica de leitura rápida foi detectada neste relatório.",
             "fps_now" => "FPS atual",
             "fps_avg" => "FPS médio",
+            "fps_max" => "FPS máximo",
             "fps_1_low" => "1% baixo",
             "fps_01_low" => "0.1% baixo",
             "cpu_power_now" => "Potência CPU",
