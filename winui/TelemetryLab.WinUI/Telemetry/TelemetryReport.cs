@@ -9,6 +9,12 @@ public sealed record MetricSummary(
     double Minimum,
     double Maximum,
     double P95,
+    double P99,
+    double P1,
+    double P01,
+    double Median,
+    double StandardDeviation,
+    double Last,
     int Samples);
 
 public sealed record TelemetryReport(

@@ -9,7 +9,16 @@ public sealed class CsvTelemetryService
 {
     public async Task<TelemetryReport> LoadAsync(string path, CancellationToken cancellationToken = default)
     {
-        var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
+        await using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 1024 * 128,
+            useAsync: true);
+        using var memory = new MemoryStream();
+        await stream.CopyToAsync(memory, cancellationToken);
+        var bytes = memory.ToArray();
         return Parse(path, bytes);
     }
 
@@ -74,18 +83,36 @@ public sealed class CsvTelemetryService
         var clean = values.Where(value => value.HasValue).Select(value => value!.Value).Order().ToArray();
         if (clean.Length == 0)
         {
-            return new MetricSummary(name, GroupFor(name), 0, 0, 0, 0, 0);
+            return new MetricSummary(name, GroupFor(name), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
 
-        var p95Index = Math.Clamp((int)Math.Ceiling(clean.Length * 0.95) - 1, 0, clean.Length - 1);
+        var average = clean.Average();
+        var variance = clean.Sum(value => Math.Pow(value - average, 2)) / clean.Length;
         return new MetricSummary(
             name,
             GroupFor(name),
-            clean.Average(),
+            average,
             clean[0],
             clean[^1],
-            clean[p95Index],
+            Percentile(clean, 0.95),
+            Percentile(clean, 0.99),
+            Percentile(clean, 0.01),
+            Percentile(clean, 0.001),
+            Percentile(clean, 0.50),
+            Math.Sqrt(variance),
+            values.LastOrDefault(value => value.HasValue) ?? clean[^1],
             clean.Length);
+    }
+
+    private static double Percentile(IReadOnlyList<double> sorted, double percentile)
+    {
+        if (sorted.Count == 0)
+        {
+            return 0;
+        }
+
+        var index = Math.Clamp((int)Math.Ceiling(sorted.Count * percentile) - 1, 0, sorted.Count - 1);
+        return sorted[index];
     }
 
     private static string Decode(byte[] bytes)
@@ -233,7 +260,7 @@ public sealed class CsvTelemetryService
         }
     }
 
-    private static string Fold(string text)
+    public static string Fold(string text)
     {
         var normalized = text.Normalize(NormalizationForm.FormD);
         var builder = new StringBuilder(normalized.Length);
@@ -248,12 +275,30 @@ public sealed class CsvTelemetryService
         return builder.ToString();
     }
 
-    private static string GroupFor(string name)
+    public static bool IsTemperatureMetric(string name)
     {
         var low = Fold(name);
-        if (low.Contains("fps") || low.Contains("quadros") || low.Contains("frame rate")) return "FPS";
-        if (low.Contains("temperatura") || low.Contains("temperature") || low.Contains("hotspot") || low.Contains("[°c]")) return "Temperatura";
-        if (low.Contains("[w]") || low.Contains("power") || low.Contains("potencia") || low.Contains("consumo de energia")) return "Potência";
+        return low.Contains("temperatura") || low.Contains("temperature") || low.Contains("hotspot") || low.Contains("[°c]") || low.Contains("[c]");
+    }
+
+    public static bool IsFpsMetric(string name)
+    {
+        var low = Fold(name);
+        return low.Contains("fps") || low.Contains("quadros") || low.Contains("frame rate") || low.Contains("framerate");
+    }
+
+    public static bool IsPowerMetric(string name)
+    {
+        var low = Fold(name);
+        return low.Contains("[w]") || low.Contains("power") || low.Contains("potencia") || low.Contains("consumo de energia");
+    }
+
+    public static string GroupFor(string name)
+    {
+        var low = Fold(name);
+        if (IsFpsMetric(name)) return "FPS";
+        if (IsTemperatureMetric(name)) return "Temperatura";
+        if (IsPowerMetric(name)) return "Potência";
         if (low.Contains("%") || low.Contains("load") || low.Contains("carga") || low.Contains("uso")) return "Carga";
         if (low.Contains("clock") || low.Contains("mhz") || low.Contains("frequencia")) return "Frequencia";
         if (low.Contains("memoria") || low.Contains("memory") || low.Contains("ram") || low.Contains("vram")) return "Memoria";
