@@ -18,3 +18,4 @@ class Report:
     context: dict[str, Any]
     mtime_ns: int | None = None
     size: int | None = None
+    live_reload: bool = False

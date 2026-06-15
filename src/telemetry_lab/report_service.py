@@ -22,8 +22,11 @@ def build_report(
     translate: Translate,
     mtime_ns: int | None = None,
     size: int | None = None,
+    live_reload: bool = False,
 ) -> Report:
-    return make_report(source, df, mtime_ns=mtime_ns, size=size, translate=translate)
+    report = make_report(source, df, mtime_ns=mtime_ns, size=size, translate=translate)
+    report.live_reload = live_reload
+    return report
 
 
 def report_for_temperature_unit(report: Report, temperature_unit: str) -> Report:
@@ -35,6 +38,7 @@ def report_for_temperature_unit(report: Report, temperature_unit: str) -> Report
         context=report.context,
         mtime_ns=report.mtime_ns,
         size=report.size,
+        live_reload=report.live_reload,
     )
 
 
@@ -58,7 +62,7 @@ def build_path_report(
 ) -> Report:
     source = str(Path(path).expanduser())
     df, mtime_ns, size = load_csv_path(source, live_reload, cache_reader, reload_token)
-    return build_report(source, df, translate, mtime_ns, size)
+    return build_report(source, df, translate, mtime_ns, size, live_reload=live_reload)
 
 
 def build_path_reports(

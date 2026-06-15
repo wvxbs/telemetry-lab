@@ -137,17 +137,34 @@ def _best_metric(report: Report, predicate, ranker=None) -> str | None:
     return candidates[0] if candidates else None
 
 
-def _highlight_card(label: str, report: Report, metric: str | None, value_key: str = "last") -> None:
+def _highlight_value_key(report: Report, metric: str) -> str:
+    if report.live_reload:
+        return "last"
+    if is_temperature_metric(metric):
+        return "max"
+    return "avg"
+
+
+def _comparison_for_card(report: Report, metric: str, stats: dict[str, float | int], unit: str) -> str | None:
+    if not stats.get("samples", 0):
+        return None
+    if report.live_reload:
+        return f"Média: {_format_value(stats.get('avg'), unit)}"
+    if is_temperature_metric(metric):
+        return f"Média: {_format_value(stats.get('avg'), unit)}"
+    if is_fps_metric(metric):
+        return f"1%: {_format_value(stats.get('p1'), unit)}"
+    return f"Max: {_format_value(stats.get('max'), unit)}"
+
+
+def _highlight_card(label: str, report: Report, metric: str | None, value_key: str | None = None) -> None:
     if not metric or metric not in report.numeric.columns:
         st.metric(label, "-")
         return
     stats = _clean_stats(report.numeric[metric])
     unit = metric_unit(metric)
-    value = stats.get(value_key)
-    delta = None
-    if stats.get("samples", 0):
-        delta = f"Média: {_format_value(stats.get('avg'), unit)}"
-    st.metric(label, _format_value(value, unit), delta=delta, help=metric)
+    selected_key = value_key or _highlight_value_key(report, metric)
+    st.metric(label, _format_value(stats.get(selected_key), unit), delta=_comparison_for_card(report, metric, stats, unit), help=metric)
 
 
 def _filtered_fps_series(series: pd.Series, min_fps: float, max_fps: float) -> pd.Series:
@@ -180,12 +197,17 @@ def render_gaming_view(reports: list[Report]) -> None:
         if fps and fps in report.numeric.columns:
             filtered = _filtered_fps_series(report.numeric[fps], min_fps, max_fps)
             fps_stats = _clean_stats(filtered)
-            cards[0].metric("FPS atual", _format_value(_clean_stats(report.numeric[fps]).get("last"), "FPS"), help=fps)
-            cards[1].metric("FPS medio", _format_value(fps_stats.get("avg"), "FPS"), help=f"{fps} filtrado")
+            if report.live_reload:
+                cards[0].metric("FPS atual", _format_value(_clean_stats(report.numeric[fps]).get("last"), "FPS"), help=fps)
+                cards[1].metric("FPS medio", _format_value(fps_stats.get("avg"), "FPS"), delta=f"Último: {_format_value(fps_stats.get('last'), 'FPS')}", help=f"{fps} filtrado")
+            else:
+                cards[0].metric("FPS medio", _format_value(fps_stats.get("avg"), "FPS"), delta=f"1%: {_format_value(fps_stats.get('p1'), 'FPS')}", help=f"{fps} filtrado")
+                cards[1].metric("FPS máximo", _format_value(fps_stats.get("max"), "FPS"), delta=f"Média: {_format_value(fps_stats.get('avg'), 'FPS')}", help=f"{fps} filtrado")
             cards[2].metric("1% low", _format_value(fps_stats.get("p1"), "FPS"), help=f"{fps} filtrado")
             cards[3].metric("0.1% low", _format_value(fps_stats.get("p01"), "FPS"), help=f"{fps} filtrado")
         else:
-            for col, label in zip(cards, ["FPS atual", "FPS medio", "1% low", "0.1% low"]):
+            fps_labels = ["FPS atual", "FPS medio", "1% low", "0.1% low"] if any(item.live_reload for item in reports) else ["FPS medio", "FPS máximo", "1% low", "0.1% low"]
+            for col, label in zip(cards, fps_labels):
                 col.metric(label, "-")
 
         cards = st.columns(5)
