@@ -122,6 +122,8 @@ No volume is required for normal use.
 
 The native WinUI 3 app is published to GitHub Packages on every commit to `main`.
 
+The Windows artifact is also built by GitHub Actions without replacing the Docker workflow. Open **Actions**, choose **Build Windows app**, and download `TelemetryLab-WinUI3-windows-x64`. Version tags such as `v0.1.0` also publish the same zip in GitHub Releases.
+
 Open the repository page on GitHub, go to **Packages**, and download the latest `TelemetryLab.WinUI` NuGet package. The package is a distribution carrier, not a library: open or extract the `.nupkg` file as a zip and use the app bundle at:
 
 ```text

@@ -1,0 +1,82 @@
+name: Build Windows app
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-winui:
+    name: Build Windows artifact
+    runs-on: windows-latest
+
+    env:
+      PROJECT_PATH: winui/TelemetryLab.WinUI/TelemetryLab.WinUI.csproj
+      ARTIFACT_DIR: artifacts/TelemetryLab-WinUI3
+      ARTIFACT_NAME: TelemetryLab-WinUI3-windows-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore WinUI project
+        run: dotnet restore "${{ env.PROJECT_PATH }}"
+
+      - name: Publish WinUI app
+        run: >
+          dotnet publish "${{ env.PROJECT_PATH }}"
+          -c Release
+          -r win-x64
+          -p:SelfContained=true
+          -p:WindowsPackageType=None
+          -o "${{ env.ARTIFACT_DIR }}"
+
+      - name: Add install helpers
+        shell: pwsh
+        run: |
+          Copy-Item `
+            -LiteralPath "winui\TelemetryLab.WinUI\Packaging\install.ps1", "winui\TelemetryLab.WinUI\Packaging\uninstall.ps1" `
+            -Destination "${env:ARTIFACT_DIR}" `
+            -Force
+
+      - name: Sign Windows executables if configured
+        shell: pwsh
+        env:
+          CODESIGN_PFX_BASE64: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PFX_PASSWORD }}
+          CODESIGN_TIMESTAMP_URL: ${{ vars.CODESIGN_TIMESTAMP_URL }}
+        run: >
+          ./scripts/sign-windows-artifact.ps1
+          -ArtifactDir "${env:ARTIFACT_DIR}"
+
+      - name: Upload WinUI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_DIR }}/**
+
+      - name: Create release archive
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path "${env:ARTIFACT_DIR}\*" `
+            -DestinationPath "artifacts/${env:ARTIFACT_NAME}.zip" `
+            -Force
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/${{ env.ARTIFACT_NAME }}.zip
