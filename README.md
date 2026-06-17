@@ -140,18 +140,33 @@ Detailed Windows app documentation: [docs/WINDOWS_APP.md](docs/WINDOWS_APP.md).
 
 ## Windows App Package
 
-The native WinUI 3 app is published to GitHub Packages on every commit to `main`.
+The native WinUI 3 app is published in GitHub Releases for easy public download.
 
-The Windows artifact is also built by GitHub Actions without replacing the Docker workflow. Open **Actions**, choose **Build Windows app**, and download `TelemetryLab-WinUI3-windows-x64-exe` for the easiest path: a single `TelemetryLab.exe` file that extracts the WinUI app into your user profile and starts it. Download `TelemetryLab-WinUI3-windows-x64` only if you want the full portable folder. Version tags such as `v0.1.0` also publish both formats in GitHub Releases.
+Open the repository on GitHub and use **Releases** on the right side of the repo page.
 
-Open the repository page on GitHub, go to **Packages**, and download the latest `TelemetryLab.WinUI` NuGet package. The package is a distribution carrier, not a library: open or extract the `.nupkg` file as a zip and use the single-file launcher or the app bundle at:
+For most users, download:
 
 ```text
-tools/win-x64/TelemetryLab.WinUI-win-x64.exe
-tools/win-x64/TelemetryLab.WinUI-win-x64.zip
+TelemetryLab-WinUI3-windows-x64.exe
 ```
 
-Run the `.exe` directly for the lowest-friction experience. Extract the `.zip` on Windows and run `TelemetryLab.WinUI.exe` if you prefer to inspect or keep the full portable folder.
+That is the single-file launcher. Run it directly. It extracts the app into your user profile and starts the native WinUI dashboard.
+
+If you prefer a fully inspectable portable folder, download:
+
+```text
+TelemetryLab-WinUI3-windows-x64.zip
+```
+
+Extract it and run:
+
+```text
+TelemetryLab.WinUI.exe
+```
+
+The `winui-latest` release is updated automatically from the WinUI branch so it is visible and downloadable without logging in to GitHub. Version tags such as `v0.1.0` publish versioned releases with the same assets.
+
+GitHub Actions artifacts are still uploaded for CI/debugging, but they are not the recommended download path because GitHub may require login to access workflow artifacts. GitHub Packages is also kept as a package distribution path, but Releases are the user-facing download surface.
 
 Windows executables for `main`, version tags, and GitHub Packages are Authenticode-signed by the CI before they are uploaded. Maintainers must configure `WINDOWS_CODESIGN_PFX_BASE64` and `WINDOWS_CODESIGN_PFX_PASSWORD` as repository or environment secrets; otherwise release/package jobs fail instead of publishing a blocked unsigned executable. Feature-branch artifacts may be unsigned for testing and can still be blocked by Windows SmartScreen. Each artifact also includes a `*.sha256.txt` checksum file.
 

@@ -16,17 +16,19 @@ Use the Streamlit/Docker app when you want the web dashboard, browser uploads/do
 
 ## Download Options
 
-GitHub Actions publishes two Windows artifacts from the **Build Windows app** workflow.
+Use GitHub Releases for normal downloads. Releases are visible on the public repository page and can be downloaded without signing in to GitHub.
+
+Open the repository page and use:
+
+```text
+Releases -> Telemetry Lab WinUI latest
+```
+
+The release exposes two user-facing assets.
 
 ### Single-file launcher
 
-Artifact:
-
-```text
-TelemetryLab-WinUI3-windows-x64-exe
-```
-
-This contains one file:
+Download:
 
 ```text
 TelemetryLab-WinUI3-windows-x64.exe
@@ -48,10 +50,10 @@ This is not a traditional installer. It is a low-friction launcher/cache wrapper
 
 ### Portable folder
 
-Artifact:
+Download:
 
 ```text
-TelemetryLab-WinUI3-windows-x64
+TelemetryLab-WinUI3-windows-x64.zip
 ```
 
 This contains the full self-contained WinUI folder. Extract it and run:
@@ -61,6 +63,12 @@ TelemetryLab.WinUI.exe
 ```
 
 Use this when you want to inspect the files, keep the app portable, or run the included PowerShell install scripts yourself.
+
+### CI artifacts and packages
+
+GitHub Actions artifacts are still uploaded by the **Build Windows app** workflow for debugging and CI traceability, but they are not the recommended user download path because GitHub can require login to access workflow artifacts.
+
+GitHub Packages may also contain a package distribution, but Releases are the friendly public download surface.
 
 ## Running Without Installing
 
@@ -237,6 +245,12 @@ Windows app artifacts:
 ```
 
 Behavior:
+
+- builds the self-contained WinUI app;
+- builds the single-file launcher;
+- uploads workflow artifacts for CI/debugging;
+- updates the public `winui-latest` GitHub Release from `feature/winui3-shell`;
+- publishes versioned GitHub Releases for `v*` tags.
 
 - `feature/winui3-shell`: builds development artifacts; signing is optional;
 - `main`: builds release-quality artifacts; signing is required;
