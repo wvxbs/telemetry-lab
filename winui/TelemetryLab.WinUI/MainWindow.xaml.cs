@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Gabriel Ferreira
 using System.Diagnostics;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -24,7 +26,7 @@ public sealed partial class MainWindow : Window
 
     private readonly CsvTelemetryService _service = new();
     private readonly IntPtr _hwnd;
-    private readonly DispatcherTimer _liveReloadTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer _liveReloadTimer = new() { Interval = TimeSpan.FromSeconds(0.5) };
     private TelemetryReport _report = TelemetryReport.Empty;
     private TelemetryReport _compareReport = TelemetryReport.Empty;
     private string _section = "Relatório";
@@ -37,6 +39,7 @@ public sealed partial class MainWindow : Window
     private string _metricSearch = string.Empty;
     private double _fpsMinimum = 30;
     private double _fpsMaximum = 1000;
+    private double _liveReloadIntervalSeconds = 0.5;
     private long _lastLoadedWriteTicks;
     private long _lastLoadedSize;
     private bool _liveReload;
@@ -214,6 +217,7 @@ public sealed partial class MainWindow : Window
             UpdateLiveReloadTimer();
             RebuildSidebar();
         }));
+        side.Children.Add(BuildLiveReloadIntervalControl());
         side.Children.Add(BuildLiveReloadStateRow());
 
         side.Children.Add(BuildNavItem("\uE9D2", "Relatório", T("report")));
@@ -335,16 +339,16 @@ public sealed partial class MainWindow : Window
                 MainSurface.Children.Add(BuildGamingSection());
                 break;
             case "CPU":
-                MainSurface.Children.Add(BuildComponentSection("CPU", T("cpu_subtitle"), IsCpuDetailMetric, RankCpuMetric));
+                MainSurface.Children.Add(BuildComponentSection("cpu", "CPU", T("cpu_subtitle"), IsCpuDetailMetric, RankCpuMetric));
                 break;
             case "GPU":
-                MainSurface.Children.Add(BuildComponentSection("GPU", T("gpu_subtitle"), IsGpuDetailMetric, RankGpuMetric));
+                MainSurface.Children.Add(BuildComponentSection("gpu", "GPU", T("gpu_subtitle"), IsGpuDetailMetric, RankGpuMetric));
                 break;
             case "Memória":
-                MainSurface.Children.Add(BuildComponentSection(T("memory"), T("memory_subtitle"), IsMemoryDetailMetric, RankMemoryMetric));
+                MainSurface.Children.Add(BuildComponentSection("memory", T("memory"), T("memory_subtitle"), IsMemoryDetailMetric, RankMemoryMetric));
                 break;
             case "Armazenamento":
-                MainSurface.Children.Add(BuildComponentSection(T("storage"), T("storage_subtitle"), IsStorageMetric, RankStorageMetric));
+                MainSurface.Children.Add(BuildComponentSection("storage", T("storage"), T("storage_subtitle"), IsStorageMetric, RankStorageMetric));
                 break;
             case "Potência":
                 MainSurface.Children.Add(BuildMetricSection("Potência", T("power_subtitle")));
@@ -596,7 +600,7 @@ public sealed partial class MainWindow : Window
         return BuildCard(panel);
     }
 
-    private UIElement BuildComponentSection(string title, string subtitle, Func<MetricSummary, bool> predicate, Func<string, int> rank)
+    private UIElement BuildComponentSection(string component, string title, string subtitle, Func<MetricSummary, bool> predicate, Func<string, int> rank)
     {
         var metrics = _report.Summaries
             .Where(predicate)
@@ -605,19 +609,217 @@ public sealed partial class MainWindow : Window
             .ToList();
 
         var panel = BuildCardStack(title, subtitle);
+        panel.Children.Add(BuildHardwareSummary(component));
+        if (component == "cpu")
+        {
+            panel.Children.Add(BuildCpuClusterSection());
+        }
+        else if (component == "storage")
+        {
+            panel.Children.Add(BuildStorageDeviceSection(metrics));
+        }
+
         if (metrics.Count == 0)
         {
             panel.Children.Add(new TextBlock { Text = T("no_metric"), Opacity = 0.72, TextWrapping = TextWrapping.Wrap });
             return BuildCard(panel);
         }
 
-        panel.Children.Add(BuildHighlightGrid(
-            metrics.Take(_detailLevel == "Essencial" ? 4 : 6).Select(BuildComponentHighlight).ToList(),
-            _detailLevel == "Essencial" ? 4 : 3));
+        var highlights = BuildComponentHighlights(component, metrics);
+        if (highlights.Count > 0)
+        {
+            panel.Children.Add(BuildHighlightGrid(highlights, _detailLevel == "Essencial" ? 4 : 3));
+        }
 
         panel.Children.Add(BuildMetricTable(FilterMetrics(metrics).Take(DataMetricLimit())));
         panel.Children.Add(BuildChart(metrics[0].Name, _chartType));
         return BuildCard(panel);
+    }
+
+
+    private IReadOnlyList<HighlightMetric> BuildComponentHighlights(string component, IReadOnlyList<MetricSummary> metrics)
+    {
+        var cards = new List<HighlightMetric>();
+        void Add(string label, string glyph, Func<MetricSummary, bool> predicate, Func<string, int>? rank = null)
+        {
+            var metric = metrics
+                .Where(predicate)
+                .OrderBy(item => rank?.Invoke(item.Name) ?? 0)
+                .ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase)
+                .FirstOrDefault();
+            if (metric is not null && cards.All(card => card.Source != metric.Name))
+            {
+                cards.Add(BuildComponentHighlight(metric) with { Label = label, Glyph = glyph });
+            }
+        }
+
+        if (component == "gpu")
+        {
+            Add(T("gpu_power_now"), "\uE945", metric => IsGpuMetric(metric.Name) && CsvTelemetryService.IsPowerMetric(metric.Name), RankGpuPowerMetric);
+            Add(T("gpu_temp_now"), "\uE9CA", metric => IsGpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name), RankGpuTemperatureMetric);
+            Add("Hotspot", "\uE9CA", metric => IsGpuMetric(metric.Name) && IsGpuHotspotMetric(metric.Name), RankGpuTemperatureMetric);
+            Add(T("vram_usage"), "\uE8A7", IsVramMetric, RankVramMetric);
+            Add(T("gpu_usage"), "\uE7F4", metric => IsGpuCoreLoadMetric(metric.Name), _ => 0);
+            Add(T("memory_clock"), "\uE8A7", metric => IsGpuMemoryClockMetric(metric.Name), _ => 0);
+        }
+        else if (component == "cpu")
+        {
+            Add(T("cpu_power_now"), "\uE945", metric => IsCpuMetric(metric.Name) && CsvTelemetryService.IsPowerMetric(metric.Name), RankCpuMetric);
+            Add(T("cpu_temp_now"), "\uE9CA", metric => IsCpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name), RankCpuMetric);
+            Add(T("cpu_usage"), "\uE950", IsCpuLoadMetric, RankCpuMetric);
+            Add("P-core", "\uE950", metric => IsCpuClusterClock(metric.Name, "p-core"), _ => 0);
+            Add("E-core", "\uE950", metric => IsCpuClusterClock(metric.Name, "e-core"), _ => 0);
+            Add(T("core_clock"), "\uE950", metric => IsCpuCoreClock(metric.Name), RankCpuMetric);
+        }
+        else if (component == "memory")
+        {
+            Add($"{MemoryTechnologyLabel()} MT/s", "\uE8A7", metric => IsMemoryClockMetric(metric.Name), RankMemoryMetric);
+            Add(T("ram_usage"), "\uE8A7", IsRamMetric, RankMemoryMetric);
+            Add(T("memory_used"), "\uE8A7", metric => CsvTelemetryService.Fold(metric.Name).Contains("memoria fisica utilizada"), RankMemoryMetric);
+            Add(T("memory_temp"), "\uE9CA", IsMemoryTemperatureMetric, RankMemoryMetric);
+        }
+        else if (component == "storage")
+        {
+            foreach (var metric in metrics.Where(metric => CsvTelemetryService.IsTemperatureMetric(metric.Name)).Take(3))
+            {
+                cards.Add(BuildComponentHighlight(metric) with { Label = StorageDeviceLabel(metric.Name), Glyph = "\uE9CA" });
+            }
+            Add(T("disk_health"), "\uE7F8", metric => CsvTelemetryService.Fold(metric.Name).Contains("vida restante"), RankStorageMetric);
+            Add(T("disk_activity"), "\uE7F8", metric => CsvTelemetryService.Fold(metric.Name).Contains("atividade total"), RankStorageMetric);
+        }
+
+        return cards.Take(_detailLevel == "Essencial" ? 4 : 6).ToList();
+    }
+
+    private UIElement BuildHardwareSummary(string component)
+    {
+        var text = component switch
+        {
+            "cpu" => CpuHardwareSummary(),
+            "gpu" => GpuHardwareSummary(),
+            "memory" => MemoryHardwareSummary(),
+            "storage" => StorageHardwareSummary(),
+            _ => string.Empty
+        };
+        return new TextBlock
+        {
+            Text = text,
+            Opacity = 0.70,
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap
+        };
+    }
+
+    private string CpuHardwareSummary()
+    {
+        var p = CountCpuCluster("p-core");
+        var e = CountCpuCluster("e-core");
+        var lp = CountCpuCluster("lp-core") + CountCpuCluster("lp e-core");
+        if (p + e + lp > 0)
+        {
+            var parts = new List<string>();
+            if (p > 0) parts.Add($"{p} P-core");
+            if (e > 0) parts.Add($"{e} E-core");
+            if (lp > 0) parts.Add($"{lp} LP-core");
+            return string.Format(T("hardware_detected"), string.Join(" + ", parts)) + " · " + T("hardware_name_missing");
+        }
+        var cores = _report.Summaries.Count(metric => IsCpuCoreClock(metric.Name));
+        return cores > 0
+            ? string.Format(T("hardware_detected"), $"{cores} cores") + " · " + T("hardware_name_missing")
+            : T("hardware_name_missing");
+    }
+
+    private string GpuHardwareSummary()
+    {
+        var blocks = new List<string>();
+        if (_report.Columns.Any(col => CsvTelemetryService.Fold(col).Contains("nvvdd") || CsvTelemetryService.Fold(col).Contains("8-pin") || CsvTelemetryService.Fold(col).Contains("memoria dedicada gpu")))
+        {
+            blocks.Add(T("dedicated_gpu_block"));
+        }
+        if (_report.Columns.Any(col => CsvTelemetryService.Fold(col).Contains("gpu d3d") || CsvTelemetryService.Fold(col).Contains("igpu")))
+        {
+            blocks.Add(T("integrated_gpu_block"));
+        }
+        return blocks.Count > 0
+            ? string.Format(T("hardware_detected"), string.Join(" · ", blocks)) + " · " + T("hardware_name_missing")
+            : T("hardware_name_missing");
+    }
+
+    private string MemoryHardwareSummary()
+    {
+        var clock = _report.Summaries.FirstOrDefault(metric => IsMemoryClockMetric(metric.Name));
+        var rate = clock is null ? "-" : FormatHighlightValue(DisplayValue(clock.Name, clock.Last), "MT/s");
+        return string.Format(T("memory_hardware_summary"), MemoryTechnologyLabel(), rate);
+    }
+
+    private string StorageHardwareSummary()
+    {
+        var devices = _report.Summaries.Where(IsStorageMetric).Select(metric => StorageDeviceLabel(metric.Name)).Distinct().ToList();
+        return devices.Count == 0 ? T("hardware_name_missing") : string.Format(T("storage_hardware_summary"), devices.Count, string.Join(", ", devices));
+    }
+
+    private UIElement BuildCpuClusterSection()
+    {
+        var rows = CpuClusterRows();
+        if (rows.Count == 0)
+        {
+            return new TextBlock { Text = T("cpu_cluster_empty"), Opacity = 0.62, TextWrapping = TextWrapping.Wrap };
+        }
+        var stack = new StackPanel { Spacing = 8 };
+        stack.Children.Add(new TextBlock { Text = T("cpu_clusters"), FontSize = 14, FontWeight = new Windows.UI.Text.FontWeight { Weight = 600 } });
+        stack.Children.Add(BuildSimpleTable([T("cluster"), T("avg"), T("max"), T("last"), T("cores")], rows));
+        return stack;
+    }
+
+    private List<IReadOnlyList<string>> CpuClusterRows()
+    {
+        var groups = _report.Summaries
+            .Where(metric => IsCpuCoreClock(metric.Name))
+            .GroupBy(metric => CpuClusterName(metric.Name))
+            .OrderBy(group => CpuClusterRank(group.Key));
+        var rows = new List<IReadOnlyList<string>>();
+        foreach (var group in groups)
+        {
+            var metrics = group.ToList();
+            rows.Add([
+                group.Key,
+                FormatHighlightValue(metrics.Average(metric => metric.Average), "MHz"),
+                FormatHighlightValue(metrics.Max(metric => metric.Maximum), "MHz"),
+                FormatHighlightValue(metrics.Average(metric => metric.Last), "MHz"),
+                metrics.Count.ToString("N0")
+            ]);
+        }
+        return rows;
+    }
+
+    private UIElement BuildStorageDeviceSection(IReadOnlyList<MetricSummary> metrics)
+    {
+        var rows = metrics
+            .Where(IsStorageMetric)
+            .GroupBy(metric => StorageDeviceLabel(metric.Name))
+            .OrderBy(group => group.Key, StringComparer.CurrentCultureIgnoreCase)
+            .Select(group =>
+            {
+                var temp = group.FirstOrDefault(metric => CsvTelemetryService.IsTemperatureMetric(metric.Name));
+                var health = group.FirstOrDefault(metric => CsvTelemetryService.Fold(metric.Name).Contains("vida restante"));
+                var activity = group.FirstOrDefault(metric => CsvTelemetryService.Fold(metric.Name).Contains("atividade total"));
+                return (IReadOnlyList<string>)[
+                    group.Key,
+                    temp is null ? "-" : FormatValue(temp, temp.Last),
+                    health is null ? "-" : FormatValue(health, health.Last),
+                    activity is null ? "-" : FormatValue(activity, activity.Last),
+                    group.Count().ToString("N0")
+                ];
+            })
+            .ToList();
+        if (rows.Count == 0)
+        {
+            return new TextBlock { Text = T("storage_empty"), Opacity = 0.62 };
+        }
+        var stack = new StackPanel { Spacing = 8 };
+        stack.Children.Add(new TextBlock { Text = T("storage_devices"), FontSize = 14, FontWeight = new Windows.UI.Text.FontWeight { Weight = 600 } });
+        stack.Children.Add(BuildSimpleTable([T("device"), T("temperature"), T("health"), T("activity"), T("sensors")], rows));
+        return stack;
     }
 
     private HighlightMetric BuildComponentHighlight(MetricSummary metric)
@@ -638,7 +840,8 @@ public sealed partial class MainWindow : Window
         if (IsCpuMetric(metricName) && CsvTelemetryService.IsPowerMetric(metricName)) return T("cpu_power_now");
         if (IsGpuMetric(metricName) && CsvTelemetryService.IsTemperatureMetric(metricName)) return T("gpu_temp_now");
         if (IsCpuMetric(metricName) && CsvTelemetryService.IsTemperatureMetric(metricName)) return T("cpu_temp_now");
-        if (IsStorageMetric(new MetricSummary(metricName, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return T("storage");
+        if (IsMemoryClockMetric(metricName)) return $"{MemoryTechnologyLabel()} MT/s";
+        if (IsStorageMetric(new MetricSummary(metricName, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return StorageDeviceLabel(metricName);
         if (IsMemoryDetailMetric(new MetricSummary(metricName, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return T("memory");
         return metricName;
     }
@@ -1153,6 +1356,39 @@ public sealed partial class MainWindow : Window
         return button;
     }
 
+
+    private UIElement BuildLiveReloadIntervalControl()
+    {
+        var box = new TextBox
+        {
+            Header = T("live_interval"),
+            Text = _liveReloadIntervalSeconds.ToString("0.0", CultureInfo.CurrentCulture),
+            CornerRadius = new CornerRadius(8),
+            MinHeight = 34,
+            IsEnabled = _liveReload
+        };
+        void Apply()
+        {
+            if (double.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value) ||
+                double.TryParse(box.Text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+            {
+                _liveReloadIntervalSeconds = Math.Clamp(value, 0.25, 10);
+                _liveReloadTimer.Interval = TimeSpan.FromSeconds(_liveReloadIntervalSeconds);
+                box.Text = _liveReloadIntervalSeconds.ToString("0.0", CultureInfo.CurrentCulture);
+                SetLiveReloadState(GetLiveReloadState());
+            }
+        }
+        box.LostFocus += (_, _) => Apply();
+        box.KeyDown += (_, args) =>
+        {
+            if (args.Key == VirtualKey.Enter)
+            {
+                Apply();
+            }
+        };
+        return box;
+    }
+
     private UIElement BuildToggleRow(string label, bool isOn, RoutedEventHandler handler)
     {
         var toggle = new CheckBox
@@ -1291,9 +1527,12 @@ public sealed partial class MainWindow : Window
 
     private double DisplayValue(string metricName, double value)
     {
-        return _temperatureUnit == "F" && CsvTelemetryService.IsTemperatureMetric(metricName)
-            ? value * 9 / 5 + 32
-            : value;
+        if (_temperatureUnit == "F" && CsvTelemetryService.IsTemperatureMetric(metricName))
+        {
+            return value * 9 / 5 + 32;
+        }
+
+        return IsMemoryClockMetric(metricName) ? value * 2 : value;
     }
 
     private string UnitForMetric(string metricName)
@@ -1307,6 +1546,7 @@ public sealed partial class MainWindow : Window
         if (CsvTelemetryService.IsFpsMetric(metricName)) return "FPS";
         if (CsvTelemetryService.IsPowerMetric(metricName)) return "W";
         if (low.Contains("%") || low.Contains("load") || low.Contains("carga") || low.Contains("uso")) return "%";
+        if (IsMemoryClockMetric(metricName)) return "MT/s";
         if (low.Contains("mhz")) return "MHz";
         if (low.Contains("ghz")) return "GHz";
         if (low.Contains("rpm")) return "RPM";
@@ -1322,6 +1562,110 @@ public sealed partial class MainWindow : Window
         }
 
         return "-";
+    }
+
+
+    private bool IsGpuHotspotMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        return low.Contains("ponto quente") || low.Contains("hotspot") || low.Contains("hot spot");
+    }
+
+    private bool IsGpuCoreLoadMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        return IsGpuMetric(name) && (low.Contains("carga do nucleo") || low.Contains("gpu core load"));
+    }
+
+    private bool IsGpuMemoryClockMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        return IsGpuMetric(name) && (low.Contains("relogio de memoria gpu") || low.Contains("gpu memory clock"));
+    }
+
+    private static bool IsMemoryClockMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        return !low.Contains("gpu") && (low.Contains("relogio da memoria") || low.Contains("memory clock")) && low.Contains("mhz");
+    }
+
+    private string MemoryTechnologyLabel()
+    {
+        var cols = string.Join(" ", _report.Columns.Select(CsvTelemetryService.Fold));
+        if (cols.Contains("spd hub") || cols.Contains("pmic") || cols.Contains("vddq")) return "DDR5";
+        if (cols.Contains("gear mode")) return "DDR4/DDR5";
+        if (cols.Contains("ddr4")) return "DDR4";
+        if (cols.Contains("ddr5")) return "DDR5";
+        if (cols.Contains("ddr3")) return "DDR3";
+        return "DDR";
+    }
+
+    private int CountCpuCluster(string cluster)
+    {
+        return _report.Summaries
+            .Where(metric => IsCpuCoreClock(metric.Name) && CsvTelemetryService.Fold(metric.Name).Contains(cluster))
+            .Select(metric => CoreOrdinal(metric.Name))
+            .Where(value => value >= 0)
+            .Distinct()
+            .Count();
+    }
+
+    private static bool IsCpuCoreClock(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        if (!low.Contains("mhz") || !(low.Contains("relogio") || low.Contains("clock"))) return false;
+        if (low.Contains("efetivo") || low.Contains("effective") || low.Contains("avg") || low.Contains("barramento") || low.Contains("bus") || low.Contains("ring") || low.Contains("llc")) return false;
+        if (low.Contains("gpu") || low.Contains("memoria") || low.Contains("memory")) return false;
+        return low.Contains("p-core") || low.Contains("e-core") || low.Contains("lp-core") || low.Contains("core ") || Regex.IsMatch(low, @"\bcore\s*\d+");
+    }
+
+    private static bool IsCpuClusterClock(string name, string cluster)
+    {
+        return IsCpuCoreClock(name) && CsvTelemetryService.Fold(name).Contains(cluster);
+    }
+
+    private static int CoreOrdinal(string name)
+    {
+        var match = Regex.Match(CsvTelemetryService.Fold(name), @"(?:p-core|e-core|lp-core|core)\s*(\d+)");
+        return match.Success && int.TryParse(match.Groups[1].Value, out var value) ? value : -1;
+    }
+
+    private static string CpuClusterName(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        if (low.Contains("lp-core") || low.Contains("lp e-core")) return "LP-core";
+        if (low.Contains("p-core")) return "P-core";
+        if (low.Contains("e-core")) return "E-core";
+        if (low.Contains("zen 5c")) return "Zen 5c";
+        if (low.Contains("zen 5")) return "Zen 5";
+        return "Core";
+    }
+
+    private static int CpuClusterRank(string name) => name switch
+    {
+        "P-core" => 0,
+        "Core" => 1,
+        "E-core" => 2,
+        "LP-core" => 3,
+        "Zen 5" => 4,
+        "Zen 5c" => 5,
+        _ => 10
+    };
+
+    private static string StorageDeviceLabel(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        var match = Regex.Match(low, @"(?:disco|disk|drive|ssd|nvme)\s*(\d+)");
+        if (match.Success && int.TryParse(match.Groups[1].Value, out var embedded) && embedded > 0)
+        {
+            return $"Disco/SSD {embedded}";
+        }
+        var suffix = Regex.Match(low, @"#(\d+)$");
+        if (suffix.Success && int.TryParse(suffix.Groups[1].Value, out var number) && number > 1)
+        {
+            return $"Disco/SSD {number}";
+        }
+        return "Disco/SSD 1";
     }
 
     private static bool IsCpuMetric(string name)
@@ -1492,7 +1836,7 @@ public sealed partial class MainWindow : Window
         if (low.Contains("carga da memoria fisica") || low.Contains("physical memory load")) return 0;
         if (low.Contains("memoria fisica utilizada") || low.Contains("physical memory used")) return 1;
         if (low.Contains("spd hub") && CsvTelemetryService.IsTemperatureMetric(name)) return 2;
-        if (low.Contains("relogio da memoria") || low.Contains("memory clock")) return 3;
+        if (low.Contains("relogio da memoria") || low.Contains("memory clock")) return 0;
         if (low.Contains("memoria virtual")) return 10;
         return 40;
     }
@@ -1514,8 +1858,8 @@ public sealed partial class MainWindow : Window
         var low = CsvTelemetryService.Fold(name);
         if (low.StartsWith("gpu consumo de energia") || low.StartsWith("gpu power") || low.Contains("gpu total power")) return 0;
         if (low.Contains("total board power") || low.Contains("tbp") || low.Contains("tgp")) return 1;
-        if (low.Contains("8-pin") || low.Contains("entrada de energia gpu")) return 4;
-        if (low.Contains("linhas gpu")) return 5;
+        if (low.Contains("8-pin") || low.Contains("entrada de energia gpu")) return 24;
+        if (low.Contains("linhas gpu")) return 25;
         if (low.Contains("fonte pp")) return 20;
         if (low.Contains("nvvdd") || low.Contains("restante do chip") || low.Contains("system agent")) return 30;
         return 10;
@@ -1686,6 +2030,28 @@ public sealed partial class MainWindow : Window
             "memory_subtitle" => "System memory, virtual memory, memory clock, and SPD hub sensors.",
             "storage_subtitle" => "Disk, SSD, NVMe, S.M.A.R.T., temperature, health, reserve, and activity sensors.",
             "quick_look_empty" => "No quick-look metric was detected in this report.",
+            "hardware_detected" => "Detected: {0}",
+            "hardware_name_missing" => "The commercial part name is not present in this HWiNFO CSV.",
+            "dedicated_gpu_block" => "dedicated GPU block",
+            "integrated_gpu_block" => "D3D/iGPU block",
+            "memory_hardware_summary" => "{0} inferred from SPD/PMIC sensors. Current effective rate: {1}.",
+            "storage_hardware_summary" => "{0} disk device/group(s) detected: {1}.",
+            "cpu_clusters" => "CPU clusters",
+            "cpu_cluster_empty" => "No CPU cluster could be safely detected in this CSV.",
+            "cluster" => "Cluster",
+            "cores" => "Cores",
+            "storage_devices" => "Storage devices",
+            "storage_empty" => "No storage sensor was detected.",
+            "device" => "Device",
+            "temperature" => "Temperature",
+            "health" => "Health",
+            "activity" => "Activity",
+            "disk_health" => "Disk health",
+            "disk_activity" => "Disk activity",
+            "memory_clock" => "Memory clock",
+            "memory_used" => "RAM used",
+            "core_clock" => "Core clock",
+            "live_interval" => "Read interval (s)",
             "fps_now" => "Current FPS",
             "fps_avg" => "Average FPS",
             "fps_max" => "Max FPS",
@@ -1807,6 +2173,28 @@ public sealed partial class MainWindow : Window
             "memory_subtitle" => "Memória do sistema, memória virtual, clock da memória e sensores SPD Hub.",
             "storage_subtitle" => "Sensores de disco, SSD, NVMe, S.M.A.R.T., temperatura, vida útil, reserva e atividade.",
             "quick_look_empty" => "Nenhuma métrica de leitura rápida foi detectada neste relatório.",
+            "hardware_detected" => "Detectado: {0}",
+            "hardware_name_missing" => "O nome comercial da peça não está presente neste CSV do HWiNFO.",
+            "dedicated_gpu_block" => "bloco de GPU dedicada",
+            "integrated_gpu_block" => "bloco D3D/iGPU",
+            "memory_hardware_summary" => "{0} inferido pelos sensores SPD/PMIC. Taxa efetiva atual: {1}.",
+            "storage_hardware_summary" => "{0} dispositivo(s) ou grupo(s) de disco detectado(s): {1}.",
+            "cpu_clusters" => "Clusters de CPU",
+            "cpu_cluster_empty" => "Nenhum cluster de CPU foi detectado com segurança neste CSV.",
+            "cluster" => "Cluster",
+            "cores" => "Núcleos",
+            "storage_devices" => "Dispositivos de armazenamento",
+            "storage_empty" => "Nenhum sensor de armazenamento foi detectado.",
+            "device" => "Dispositivo",
+            "temperature" => "Temperatura",
+            "health" => "Saúde",
+            "activity" => "Atividade",
+            "disk_health" => "Saúde do disco",
+            "disk_activity" => "Atividade do disco",
+            "memory_clock" => "Clock memória",
+            "memory_used" => "RAM usada",
+            "core_clock" => "Clock núcleo",
+            "live_interval" => "Intervalo de leitura (s)",
             "fps_now" => "FPS atual",
             "fps_avg" => "FPS médio",
             "fps_max" => "FPS máximo",
