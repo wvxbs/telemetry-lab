@@ -48,9 +48,44 @@ def infer_filename_context(stem: str) -> dict[str, Any]:
     }
 
 
+def infer_machine(raw_parts: list[str]) -> str:
+    machine_patterns = (
+        "g15", "dell", "alienware", "legion", "loq", "nitro", "predator",
+        "tuf", "rog", "omen", "victus", "thinkpad", "ideapad", "recovery kit",
+    )
+    for part in reversed(raw_parts):
+        folded = slugify(part).replace("-", " ")
+        if any(pattern in folded for pattern in machine_patterns):
+            return repair_mojibake(part)
+    return ""
+
+
+def infer_workload_from_path(raw_parts: list[str], fallback: str) -> str:
+    lowered = [slugify(part) for part in raw_parts]
+    for marker in ("jogos", "games", "game", "benchmarks", "benchmark"):
+        for idx, token in enumerate(lowered):
+            if token == marker and idx + 1 < len(raw_parts):
+                candidate = slugify(raw_parts[idx + 1])
+                if candidate and not re.fullmatch(r"\d{3,4}p", candidate):
+                    return candidate
+    for part in reversed(raw_parts):
+        token = slugify(part)
+        if token and not re.fullmatch(r"\d{3,4}p", token) and token not in {"jogos", "games", "game", "benchmark", "benchmarks", "history"}:
+            return token
+    return fallback
+
+
+def infer_resolution(raw_parts: list[str]) -> str:
+    for part in reversed(raw_parts):
+        token = slugify(part)
+        if re.fullmatch(r"\d{3,4}p", token):
+            return pretty_token(token)
+    return ""
+
+
 def infer_context(source: str, translate: Callable[[str], str] | None = None) -> dict[str, Any]:
     p = Path(source)
-    raw_parts = [part for part in p.parts if part not in ("/", "\\")]
+    raw_parts = [repair_mojibake(part) for part in p.parts if part not in ("/", "\\")]
     tokens = [slugify(part) for part in raw_parts if slugify(part)]
     hits = []
     for token in tokens:
@@ -59,7 +94,9 @@ def infer_context(source: str, translate: Callable[[str], str] | None = None) ->
     parent = slugify(p.parent.name)
     stem = slugify(p.stem)
     file_context = infer_filename_context(p.stem)
-    workload = hits[-1] if hits else parent or stem or "geral"
+    machine = infer_machine(raw_parts)
+    resolution = infer_resolution(raw_parts)
+    workload = infer_workload_from_path(raw_parts, hits[-1] if hits else parent or stem or "geral")
     category = "geral"
     joined = "/".join(tokens)
     if any(term in joined for term in ("games", "game", "jogos", "jogo", "valorant")):
@@ -69,9 +106,9 @@ def infer_context(source: str, translate: Callable[[str], str] | None = None) ->
     elif any(term in joined for term in ("benchmarks", "benchmark", "cinebench", "geekbench")):
         category = "benchmarks"
     generic_workload_terms = ("benchmark", "history", "games", "game", "jogos", "jogo", "benchmarks")
-    if parent and not any(term in parent for term in generic_workload_terms):
+    if parent and not any(term in parent for term in generic_workload_terms) and not re.fullmatch(r"\d{3,4}p", parent):
         workload = parent
-    title_bits = [pretty_token(category), pretty_token(workload)]
+    title_bits = [machine, pretty_token(workload), resolution]
     if file_context["performance_mode"]:
         title_bits.append(file_context["performance_mode"])
     if file_context["fps_cap"]:
@@ -83,6 +120,8 @@ def infer_context(source: str, translate: Callable[[str], str] | None = None) ->
         "title": title,
         "category": category,
         "workload": workload,
+        "machine": machine,
+        "resolution": resolution,
         "tags": sorted(set(hits + file_context["file_tags"])) or ["geral"],
         "file_name": repair_mojibake(p.name),
         "folder": repair_mojibake(str(p.parent)) if str(p.parent) != "." else "",
