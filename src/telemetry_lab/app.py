@@ -37,6 +37,7 @@ from telemetry_lab.report_service import (
 )
 from telemetry_lab.report_views import (
     render_fps_view,
+    render_component_view,
     render_gaming_view,
     render_glossary_view,
     render_power_view,
@@ -464,6 +465,10 @@ def main() -> None:
         [
             tr("report"),
             tr("gaming"),
+            "CPU",
+            "GPU",
+            tr("memory"),
+            tr("storage"),
             tr("power"),
             tr("temperatures"),
             tr("frames"),
@@ -488,6 +493,30 @@ def main() -> None:
         if not reports and report:
             reports = [report]
         render_gaming_view([display_report(item) for item in reports])
+    elif view == "CPU":
+        st.subheader("CPU")
+        reports = load_many_reports_widget("cpu_reports", "")
+        if not reports and report:
+            reports = [report]
+        render_component_view([display_report(item) for item in reports], "cpu", "CPU")
+    elif view == "GPU":
+        st.subheader("GPU")
+        reports = load_many_reports_widget("gpu_reports", "")
+        if not reports and report:
+            reports = [report]
+        render_component_view([display_report(item) for item in reports], "gpu", "GPU")
+    elif view == tr("memory"):
+        st.subheader(tr("memory"))
+        reports = load_many_reports_widget("memory_reports", "")
+        if not reports and report:
+            reports = [report]
+        render_component_view([display_report(item) for item in reports], "memory", tr("memory"))
+    elif view == tr("storage"):
+        st.subheader(tr("storage"))
+        reports = load_many_reports_widget("storage_reports", "")
+        if not reports and report:
+            reports = [report]
+        render_component_view([display_report(item) for item in reports], "storage", tr("storage"))
     elif view == tr("power"):
         st.subheader(tr("power"))
         reports = load_many_reports_widget("power_reports", "")

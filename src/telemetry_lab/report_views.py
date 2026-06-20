@@ -9,6 +9,7 @@ import streamlit as st
 from telemetry_lab.analysis import stats_frame
 from telemetry_lab.metrics import (
     battery_metrics,
+    component_metrics,
     curated_gaming_metrics,
     curated_power_metrics,
     curated_temperature_metrics,
@@ -29,8 +30,10 @@ from telemetry_lab.metrics import (
     is_ram_metric,
     is_temperature_metric,
     is_vram_metric,
+    rank_cpu_metric,
     rank_gaming_metric,
     rank_gpu_power_metric,
+    rank_gpu_temperature_metric,
     rank_vram_metric,
 )
 from telemetry_lab.models import Report
@@ -185,8 +188,9 @@ def render_gaming_view(reports: list[Report]) -> None:
             st.markdown(f"### {report_label(report, f'R{idx}')}")
         fps = _best_metric(report, is_fps_metric)
         gpu_power = _best_metric(report, lambda col: is_gpu_metric(col) and is_power_metric(col), rank_gpu_power_metric)
-        gpu_temp = _best_metric(report, lambda col: is_gpu_metric(col) and is_temperature_metric(col))
-        cpu_temp = _best_metric(report, lambda col: is_cpu_metric(col) and is_temperature_metric(col))
+        cpu_power = _best_metric(report, lambda col: is_cpu_metric(col) and is_power_metric(col), rank_cpu_metric)
+        gpu_temp = _best_metric(report, lambda col: is_gpu_metric(col) and is_temperature_metric(col), rank_gpu_temperature_metric)
+        cpu_temp = _best_metric(report, lambda col: is_cpu_metric(col) and is_temperature_metric(col), rank_cpu_metric)
         gpu_load = _best_metric(report, is_gpu_load_metric, rank_gaming_metric)
         cpu_load = _best_metric(report, is_cpu_load_metric, rank_gaming_metric)
         vram = _best_metric(report, is_vram_metric, rank_vram_metric)
@@ -210,16 +214,18 @@ def render_gaming_view(reports: list[Report]) -> None:
             for col, label in zip(cards, fps_labels):
                 col.metric(label, "-")
 
-        cards = st.columns(5)
+        cards = st.columns(6)
         with cards[0]:
             _highlight_card("Potencia GPU", report, gpu_power)
         with cards[1]:
-            _highlight_card("Temp. GPU", report, gpu_temp)
+            _highlight_card("Potencia CPU", report, cpu_power)
         with cards[2]:
-            _highlight_card("Temp. CPU", report, cpu_temp)
+            _highlight_card("Temp. GPU", report, gpu_temp)
         with cards[3]:
-            _highlight_card("Uso GPU", report, gpu_load)
+            _highlight_card("Temp. CPU", report, cpu_temp)
         with cards[4]:
+            _highlight_card("Uso GPU", report, gpu_load)
+        with cards[5]:
             _highlight_card("Uso CPU", report, cpu_load)
 
         cards = st.columns(4)
@@ -237,7 +243,7 @@ def render_gaming_view(reports: list[Report]) -> None:
         visible = metric_summary([report], {report.source: metrics})
         if not visible.empty:
             st.dataframe(visible, width="stretch", hide_index=True)
-        chart_metrics = [metric for metric in [fps, gpu_power, gpu_temp, cpu_temp, gpu_load, vram, ram] if metric]
+        chart_metrics = [metric for metric in [fps, gpu_power, cpu_power, gpu_temp, cpu_temp, gpu_load, cpu_load, vram, ram] if metric]
         chart_metrics.extend([metric for metric in metrics if metric not in chart_metrics][: max(0, 8 - len(chart_metrics))])
         render_metric_chart(long_metric_frame([report], {report.source: chart_metrics}), height=320)
 
@@ -290,6 +296,33 @@ def render_temperature_view(reports: list[Report]) -> None:
     data = long_metric_frame(reports, metrics_by_report)
     st.dataframe(metric_summary(reports, metrics_by_report), width="stretch", hide_index=True)
     render_metric_chart(data)
+
+
+def render_component_view(reports: list[Report], component: str, title: str) -> None:
+    if not reports:
+        st.info("Carregue ao menos um relatorio.")
+        return
+    include_extra = st.checkbox("Mostrar sensores extras", value=True, key=f"{component}_extra_sensors")
+    metrics_by_report = {
+        report.source: component_metrics(list(report.numeric.columns), component, include_extra=include_extra) for report in reports
+    }
+    st.caption("Sensores priorizados para leitura rapida aparecem primeiro; a tabela preserva os demais dados relevantes do HWiNFO.")
+    for idx, report in enumerate(reports, start=1):
+        label = report_label(report, f"R{idx}")
+        metrics = metrics_by_report.get(report.source, [])
+        if len(reports) > 1:
+            st.markdown(f"### {label}")
+        cards = st.columns(4)
+        for col, metric in zip(cards, metrics[:4]):
+            with col:
+                _highlight_card(metric, report, metric)
+    summary = metric_summary(reports, metrics_by_report)
+    if summary.empty:
+        st.info(f"Nenhum sensor de {title.lower()} foi detectado nesses relatorios.")
+        return
+    st.dataframe(summary, width="stretch", hide_index=True)
+    chart_metrics = {source: metrics[:8] for source, metrics in metrics_by_report.items()}
+    render_metric_chart(long_metric_frame(reports, chart_metrics), height=340)
 
 
 def fps_stats(series: pd.Series, min_fps: float, max_fps: float) -> dict[str, float | int]:
