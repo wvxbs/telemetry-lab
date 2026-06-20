@@ -667,9 +667,7 @@ public sealed partial class MainWindow : Window
             Add(T("cpu_power_now"), "\uE945", metric => IsCpuMetric(metric.Name) && CsvTelemetryService.IsPowerMetric(metric.Name), RankCpuMetric);
             Add(T("cpu_temp_now"), "\uE9CA", metric => IsCpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name), RankCpuMetric);
             Add(T("cpu_usage"), "\uE950", IsCpuLoadMetric, RankCpuMetric);
-            Add("P-core", "\uE950", metric => IsCpuClusterClock(metric.Name, "p-core"), _ => 0);
-            Add("E-core", "\uE950", metric => IsCpuClusterClock(metric.Name, "e-core"), _ => 0);
-            Add(T("core_clock"), "\uE950", metric => IsCpuCoreClock(metric.Name), RankCpuMetric);
+            // Cluster clocks are rendered in the dedicated cluster table below to avoid showing P-core 0 as a summary.
         }
         else if (component == "memory")
         {
@@ -1762,8 +1760,17 @@ public sealed partial class MainWindow : Window
     {
         var low = CsvTelemetryService.Fold(metric.Name);
         var cpuVoltage = (low.Contains("vid") || low.Contains("[v]") || low.Contains("voltage") || low.Contains("tensao")) &&
+            (low.Contains("cpu") || low.Contains("core") || low.Contains("ia") || low.Contains("sa ") || low.Contains("uncore")) &&
             !IsGpuMetric(metric.Name) &&
-            !low.Contains("igpu");
+            !low.Contains("igpu") &&
+            !low.Contains("pmic") &&
+            !low.Contains("vout") &&
+            !low.Contains("vin") &&
+            !low.Contains("vddq") &&
+            !low.Contains("vpp") &&
+            !low.Contains("swa") &&
+            !low.Contains("swb") &&
+            !low.Contains("swc");
 
         return IsCpuMetric(metric.Name) || low.Contains("ia cores") || low.Contains("gt cores") || low.Contains("tjmax") || cpuVoltage;
     }
