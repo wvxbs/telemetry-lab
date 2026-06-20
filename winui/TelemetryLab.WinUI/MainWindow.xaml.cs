@@ -218,6 +218,10 @@ public sealed partial class MainWindow : Window
 
         side.Children.Add(BuildNavItem("\uE9D2", "Relatório", T("report")));
         side.Children.Add(BuildNavItem("\uE7FC", "Jogos", T("gaming")));
+        side.Children.Add(BuildNavItem("\uE950", "CPU", "CPU"));
+        side.Children.Add(BuildNavItem("\uE7F4", "GPU", "GPU"));
+        side.Children.Add(BuildNavItem("\uE8A7", "Memória", T("memory")));
+        side.Children.Add(BuildNavItem("\uE7F8", "Armazenamento", T("storage")));
         side.Children.Add(BuildNavItem("\uE945", "Potência", T("power")));
         side.Children.Add(BuildNavItem("\uE9CA", "Temperaturas", T("temperatures")));
         side.Children.Add(BuildNavItem("\uE7C1", "Quadros", T("frames")));
@@ -330,6 +334,18 @@ public sealed partial class MainWindow : Window
             case "Jogos":
                 MainSurface.Children.Add(BuildGamingSection());
                 break;
+            case "CPU":
+                MainSurface.Children.Add(BuildComponentSection("CPU", T("cpu_subtitle"), IsCpuDetailMetric, RankCpuMetric));
+                break;
+            case "GPU":
+                MainSurface.Children.Add(BuildComponentSection("GPU", T("gpu_subtitle"), IsGpuDetailMetric, RankGpuMetric));
+                break;
+            case "Memória":
+                MainSurface.Children.Add(BuildComponentSection(T("memory"), T("memory_subtitle"), IsMemoryDetailMetric, RankMemoryMetric));
+                break;
+            case "Armazenamento":
+                MainSurface.Children.Add(BuildComponentSection(T("storage"), T("storage_subtitle"), IsStorageMetric, RankStorageMetric));
+                break;
             case "Potência":
                 MainSurface.Children.Add(BuildMetricSection("Potência", T("power_subtitle")));
                 break;
@@ -412,7 +428,7 @@ public sealed partial class MainWindow : Window
             BuildHighlightMetric(T("gpu_power_now"), "\uE7F4", m => IsGpuMetric(m.Name) && CsvTelemetryService.IsPowerMetric(m.Name), RankGpuPowerMetric),
             BuildHighlightMetric(T("system_power_now"), "\uE945", m => IsSystemPowerMetric(m.Name)),
             BuildHighlightMetric(T("cpu_temp_now"), "\uE9CA", m => IsCpuMetric(m.Name) && CsvTelemetryService.IsTemperatureMetric(m.Name)),
-            BuildHighlightMetric(T("gpu_temp_now"), "\uE9CA", m => IsGpuMetric(m.Name) && CsvTelemetryService.IsTemperatureMetric(m.Name))
+            BuildHighlightMetric(T("gpu_temp_now"), "\uE9CA", m => IsGpuMetric(m.Name) && CsvTelemetryService.IsTemperatureMetric(m.Name), RankGpuTemperatureMetric)
         }
         .Where(metric => metric is not null)
         .Cast<HighlightMetric>()
@@ -580,6 +596,64 @@ public sealed partial class MainWindow : Window
         return BuildCard(panel);
     }
 
+    private UIElement BuildComponentSection(string title, string subtitle, Func<MetricSummary, bool> predicate, Func<string, int> rank)
+    {
+        var metrics = _report.Summaries
+            .Where(predicate)
+            .OrderBy(metric => rank(metric.Name))
+            .ThenBy(metric => metric.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+        var panel = BuildCardStack(title, subtitle);
+        if (metrics.Count == 0)
+        {
+            panel.Children.Add(new TextBlock { Text = T("no_metric"), Opacity = 0.72, TextWrapping = TextWrapping.Wrap });
+            return BuildCard(panel);
+        }
+
+        panel.Children.Add(BuildHighlightGrid(
+            metrics.Take(_detailLevel == "Essencial" ? 4 : 6).Select(BuildComponentHighlight).ToList(),
+            _detailLevel == "Essencial" ? 4 : 3));
+
+        panel.Children.Add(BuildMetricTable(FilterMetrics(metrics).Take(DataMetricLimit())));
+        panel.Children.Add(BuildChart(metrics[0].Name, _chartType));
+        return BuildCard(panel);
+    }
+
+    private HighlightMetric BuildComponentHighlight(MetricSummary metric)
+    {
+        return BuildHighlightFromMetric(
+            ShortMetricLabel(metric.Name),
+            GlyphForMetric(metric.Name),
+            metric,
+            HighlightValue(metric),
+            HighlightComparison(metric));
+    }
+
+    private string ShortMetricLabel(string metricName)
+    {
+        if (CsvTelemetryService.IsFpsMetric(metricName)) return "FPS";
+        if (IsVramMetric(new MetricSummary(metricName, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return T("vram_usage");
+        if (IsGpuMetric(metricName) && CsvTelemetryService.IsPowerMetric(metricName)) return T("gpu_power_now");
+        if (IsCpuMetric(metricName) && CsvTelemetryService.IsPowerMetric(metricName)) return T("cpu_power_now");
+        if (IsGpuMetric(metricName) && CsvTelemetryService.IsTemperatureMetric(metricName)) return T("gpu_temp_now");
+        if (IsCpuMetric(metricName) && CsvTelemetryService.IsTemperatureMetric(metricName)) return T("cpu_temp_now");
+        if (IsStorageMetric(new MetricSummary(metricName, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return T("storage");
+        if (IsMemoryDetailMetric(new MetricSummary(metricName, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return T("memory");
+        return metricName;
+    }
+
+    private string GlyphForMetric(string metricName)
+    {
+        if (CsvTelemetryService.IsPowerMetric(metricName)) return "\uE945";
+        if (CsvTelemetryService.IsTemperatureMetric(metricName)) return "\uE9CA";
+        if (CsvTelemetryService.IsFpsMetric(metricName)) return "\uE7C1";
+        if (IsGpuMetric(metricName)) return "\uE7F4";
+        if (IsCpuMetric(metricName)) return "\uE950";
+        if (IsStorageMetric(new MetricSummary(metricName, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return "\uE7F8";
+        return "\uE8A7";
+    }
+
     private UIElement BuildGamingSection()
     {
         var panel = BuildCardStack(T("gaming"), T("gaming_subtitle"));
@@ -628,7 +702,8 @@ public sealed partial class MainWindow : Window
         }
 
         AddCard(cards, T("gpu_power_now"), "\uE7F4", metric => IsGpuMetric(metric.Name) && CsvTelemetryService.IsPowerMetric(metric.Name), RankGpuPowerMetric);
-        AddCard(cards, T("gpu_temp_now"), "\uE9CA", metric => IsGpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name), RankHighlightMetric);
+        AddCard(cards, T("cpu_power_now"), "\uE950", metric => IsCpuMetric(metric.Name) && CsvTelemetryService.IsPowerMetric(metric.Name), RankCpuMetric);
+        AddCard(cards, T("gpu_temp_now"), "\uE9CA", metric => IsGpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name), RankGpuTemperatureMetric);
         AddCard(cards, T("cpu_temp_now"), "\uE9CA", metric => IsCpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name), RankHighlightMetric);
         AddCard(cards, T("gpu_usage"), "\uE7F4", IsGpuLoadMetric, RankGamingMetric);
         AddCard(cards, T("cpu_usage"), "\uE950", IsCpuLoadMetric, RankGamingMetric);
@@ -1252,7 +1327,11 @@ public sealed partial class MainWindow : Window
     private static bool IsCpuMetric(string name)
     {
         var low = CsvTelemetryService.Fold(name);
-        return low.Contains("cpu") || low.Contains("processador") || low.Contains("core");
+        if (low.Contains("gpu") || low.Contains("video") || low.Contains("graphics"))
+        {
+            return false;
+        }
+        return low.Contains("cpu") || low.Contains("processador") || low.Contains("core") || low.Contains("p-core") || low.Contains("e-core") || low.Contains("uncore") || low.Contains("package");
     }
 
     private static bool IsGpuMetric(string name)
@@ -1333,6 +1412,101 @@ public sealed partial class MainWindow : Window
     {
         var low = CsvTelemetryService.Fold(name);
         return low.Contains("disponivel") || low.Contains("available") || low.Contains("free");
+    }
+
+    private static bool IsCpuDetailMetric(MetricSummary metric)
+    {
+        var low = CsvTelemetryService.Fold(metric.Name);
+        var cpuVoltage = (low.Contains("vid") || low.Contains("[v]") || low.Contains("voltage") || low.Contains("tensao")) &&
+            !IsGpuMetric(metric.Name) &&
+            !low.Contains("igpu");
+
+        return IsCpuMetric(metric.Name) || low.Contains("ia cores") || low.Contains("gt cores") || low.Contains("tjmax") || cpuVoltage;
+    }
+
+    private static bool IsGpuDetailMetric(MetricSummary metric)
+    {
+        var low = CsvTelemetryService.Fold(metric.Name);
+        return IsGpuMetric(metric.Name) || low.Contains("nvvdd") || low.Contains("fbvdd") || low.Contains("8-pin");
+    }
+
+    private static bool IsMemoryDetailMetric(MetricSummary metric)
+    {
+        var low = CsvTelemetryService.Fold(metric.Name);
+        if (IsGpuMetric(metric.Name) || IsStorageMetric(metric))
+        {
+            return false;
+        }
+
+        var hasRamTerm = low == "ram" || low.StartsWith("ram ") || low.Contains(" ram ") || low.Contains("[ram]");
+        return low.Contains("memoria") || low.Contains("memory") || hasRamTerm || low.Contains("spd hub") || low.Contains("relogio da memoria");
+    }
+
+    private static bool IsStorageMetric(MetricSummary metric)
+    {
+        var low = CsvTelemetryService.Fold(metric.Name);
+        return low.Contains("disk") || low.Contains("disco") || low.Contains("drive") || low.Contains("ssd") || low.Contains("nvme") || low.Contains("s.m.a.r.t") || low.Contains("smart");
+    }
+
+    private static int RankCpuMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        if (low.Contains("consumo de energia total da cpu") || low.Contains("cpu package power")) return 0;
+        if (low.Contains("cpu inteira") || low.Contains("cpu package temperature")) return 1;
+        if (low.Contains("nucleo maximo") || low.Contains("core max")) return 2;
+        if (low.Contains("uso total da cpu") || low.Contains("utilizacao total da cpu") || low.Contains("cpu total load")) return 3;
+        if (low.Contains("relogios nucleo") || low.Contains("core clocks") || low.Contains("p-core clock avg")) return 4;
+        if (low.Contains("p-core") && low.Contains("relogio")) return 5;
+        if (low.Contains("e-core") && low.Contains("relogio")) return 6;
+        if (low.Contains("vid") || low.Contains("[v]")) return 7;
+        if (low.Contains("potencia") || low.Contains("power") || low.Contains("energia")) return 8;
+        if (CsvTelemetryService.IsTemperatureMetric(name)) return 9;
+        return 40;
+    }
+
+    private static int RankGpuTemperatureMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        if ((low.Contains("temperatura gpu") || low.Contains("gpu temperature")) && !low.Contains("ponto quente") && !low.Contains("hotspot")) return 0;
+        if (low.Contains("ponto quente") || low.Contains("hotspot")) return 1;
+        if (low.Contains("memory") || low.Contains("memoria") || low.Contains("junction")) return 2;
+        return 10;
+    }
+
+    private static int RankGpuMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        if (CsvTelemetryService.IsPowerMetric(name)) return RankGpuPowerMetric(name);
+        if (CsvTelemetryService.IsTemperatureMetric(name)) return 10 + RankGpuTemperatureMetric(name);
+        if (IsGpuLoadMetric(new MetricSummary(name, "Carga", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return 20;
+        if (IsVramMetric(new MetricSummary(name, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return 30 + RankVramMetric(name);
+        if (low.Contains("clock") || low.Contains("relogio") || low.Contains("mhz")) return 40;
+        if (low.Contains("[v]") || low.Contains("voltage") || low.Contains("tensao")) return 50;
+        if (low.Contains("busy") || low.Contains("ms")) return 60;
+        return 80;
+    }
+
+    private static int RankMemoryMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        if (low.Contains("carga da memoria fisica") || low.Contains("physical memory load")) return 0;
+        if (low.Contains("memoria fisica utilizada") || low.Contains("physical memory used")) return 1;
+        if (low.Contains("spd hub") && CsvTelemetryService.IsTemperatureMetric(name)) return 2;
+        if (low.Contains("relogio da memoria") || low.Contains("memory clock")) return 3;
+        if (low.Contains("memoria virtual")) return 10;
+        return 40;
+    }
+
+    private static int RankStorageMetric(string name)
+    {
+        var low = CsvTelemetryService.Fold(name);
+        if (CsvTelemetryService.IsTemperatureMetric(name)) return 0;
+        if (low.Contains("vida restante") || low.Contains("remaining life")) return 1;
+        if (low.Contains("reserva") || low.Contains("spare")) return 2;
+        if (low.Contains("atividade") || low.Contains("activity")) return 3;
+        if (low.Contains("falha") || low.Contains("failure")) return 4;
+        if (low.Contains("aviso") || low.Contains("warning")) return 5;
+        return 40;
     }
 
     private static int RankGpuPowerMetric(string name)
@@ -1472,6 +1646,8 @@ public sealed partial class MainWindow : Window
             "live_reload" => "Live reload",
             "report" => "Report",
             "gaming" => "Gaming",
+            "memory" => "Memory",
+            "storage" => "Storage",
             "power" => "Power",
             "temperatures" => "Temperatures",
             "frames" => "Frames",
@@ -1504,7 +1680,11 @@ public sealed partial class MainWindow : Window
             "empty_body" => "The native app now keeps the common Streamlit analysis flow: stats, focused views, custom charts, glossary, language, units, live reload, and fullscreen.",
             "overview" => "Overview",
             "overview_subtitle" => "Curated summary of the main metric families.",
-            "gaming_subtitle" => "Real-time game-relevant signals: FPS, lows, power, thermals, RAM, VRAM, and utilization.",
+            "gaming_subtitle" => "Game-relevant signals: FPS, lows, CPU/GPU power, thermals, RAM, VRAM, and utilization.",
+            "cpu_subtitle" => "CPU package, hybrid core clusters, voltage, clocks, power, load, and thermal limits.",
+            "gpu_subtitle" => "GPU clocks, memory clocks, power, voltage, load, VRAM, thermals, bus, and timing sensors.",
+            "memory_subtitle" => "System memory, virtual memory, memory clock, and SPD hub sensors.",
+            "storage_subtitle" => "Disk, SSD, NVMe, S.M.A.R.T., temperature, health, reserve, and activity sensors.",
             "quick_look_empty" => "No quick-look metric was detected in this report.",
             "fps_now" => "Current FPS",
             "fps_avg" => "Average FPS",
@@ -1587,6 +1767,8 @@ public sealed partial class MainWindow : Window
             "live_reload" => "Leitura dinâmica",
             "report" => "Relatório",
             "gaming" => "Jogos",
+            "memory" => "Memória",
+            "storage" => "Armazenamento",
             "power" => "Potência",
             "temperatures" => "Temperaturas",
             "frames" => "Quadros",
@@ -1619,7 +1801,11 @@ public sealed partial class MainWindow : Window
             "empty_body" => "O app nativo agora preserva o fluxo comum do Streamlit: estatísticas, visões focadas, gráfico customizado, glossário, idioma, unidades, live reload e tela cheia.",
             "overview" => "Visão geral",
             "overview_subtitle" => "Resumo curado das famílias principais.",
-            "gaming_subtitle" => "Sinais relevantes para jogos em tempo real: FPS, lows, potência, temperaturas, RAM, VRAM e uso.",
+            "gaming_subtitle" => "Sinais relevantes para jogos: FPS, lows, potência de CPU/GPU, temperaturas, RAM, VRAM e uso.",
+            "cpu_subtitle" => "Pacote da CPU, clusters híbridos, tensão, clocks, potência, carga e limites térmicos.",
+            "gpu_subtitle" => "Clocks da GPU, memória, potência, tensão, carga, VRAM, temperaturas, barramento e tempos.",
+            "memory_subtitle" => "Memória do sistema, memória virtual, clock da memória e sensores SPD Hub.",
+            "storage_subtitle" => "Sensores de disco, SSD, NVMe, S.M.A.R.T., temperatura, vida útil, reserva e atividade.",
             "quick_look_empty" => "Nenhuma métrica de leitura rápida foi detectada neste relatório.",
             "fps_now" => "FPS atual",
             "fps_avg" => "FPS médio",
