@@ -118,7 +118,7 @@ def is_vram_metric(name: str) -> bool:
     low = ascii_fold(name)
     if is_voltage_metric(name) or is_unavailable_memory_metric(name):
         return False
-    if any(term in low for term in ("clock", "relogio", "frequencia", "mhz", "ghz")):
+    if any(term in low for term in ("clock", "relogio", "frequencia", "mhz", "ghz", "controlador", "controller")):
         return False
     return (
         "vram" in low
@@ -421,6 +421,37 @@ def _existing(columns: list[str], preferred: tuple[str, ...]) -> list[str]:
     return result
 
 
+def drop_redundant_canonical(columns: list[str]) -> list[str]:
+    folded = [ascii_fold(col) for col in columns]
+
+    def has_raw(*needles: str) -> bool:
+        return any(all(needle in col for needle in needles) for col in folded)
+
+    redundant = set()
+    if has_raw("gpu consumo de energia"):
+        redundant.add("gpu total power w")
+    if has_raw("consumo de energia total da cpu"):
+        redundant.add("cpu package power w")
+    if has_raw("temperatura gpu"):
+        redundant.add("gpu temperature c")
+    if has_raw("temperatura de ponto quente da gpu"):
+        redundant.add("gpu hotspot temperature c")
+    if has_raw("cpu inteira"):
+        redundant.add("cpu package temperature c")
+    if has_raw("carga da memoria fisica"):
+        redundant.add("physical memory load %")
+    if has_raw("carga do nucleo da gpu"):
+        redundant.add("gpu core load %")
+
+    result = []
+    for col in columns:
+        if ascii_fold(col) in redundant:
+            continue
+        if col not in result:
+            result.append(col)
+    return result
+
+
 def curated_power_metrics(columns: list[str], include_extra: bool = False) -> list[str]:
     curated = _existing(
         columns,
@@ -433,7 +464,7 @@ def curated_power_metrics(columns: list[str], include_extra: bool = False) -> li
     )
     if include_extra:
         curated.extend([col for col in power_metrics(columns) if col not in curated][:8])
-    return curated
+    return drop_redundant_canonical(curated)
 
 
 def curated_gaming_metrics(columns: list[str], include_extra: bool = False) -> list[str]:
@@ -455,6 +486,7 @@ def curated_gaming_metrics(columns: list[str], include_extra: bool = False) -> l
         and not is_voltage_metric(col)
     ]
     ranked = sorted(primary, key=lambda col: (rank_gaming_metric(col), ascii_fold(col)))
+    ranked = drop_redundant_canonical(ranked)
     if include_extra:
         return ranked
     return ranked[:24]
@@ -474,7 +506,7 @@ def curated_temperature_metrics(columns: list[str], include_extra: bool = False)
     )
     if include_extra:
         curated.extend([col for col in temperature_metrics(columns) if col not in curated][:10])
-    return curated
+    return drop_redundant_canonical(curated)
 
 
 def is_cpu_detail_metric(name: str) -> bool:
@@ -507,10 +539,10 @@ def rank_gpu_metric(name: str) -> int:
         return rank_gpu_power_metric(name)
     if is_temperature_metric(name):
         return 10 + rank_gpu_temperature_metric(name)
-    if is_gpu_load_metric(name):
-        return 20
     if is_vram_metric(name):
-        return 30 + rank_vram_metric(name)
+        return 20 + rank_vram_metric(name)
+    if is_gpu_load_metric(name):
+        return 30
     if any(term in low for term in ("clock", "relogio", "mhz")):
         return 40
     if is_voltage_metric(name):
@@ -565,6 +597,7 @@ def component_metrics(columns: list[str], component: str, include_extra: bool = 
     else:
         return []
     ranked = sorted([col for col in columns if predicate(col)], key=lambda col: (ranker(col), ascii_fold(col)))
+    ranked = drop_redundant_canonical(ranked)
     return ranked if include_extra else ranked[:24]
 
 
