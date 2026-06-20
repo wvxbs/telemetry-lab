@@ -658,7 +658,7 @@ public sealed partial class MainWindow : Window
             Add(T("gpu_power_now"), "\uE945", metric => IsGpuMetric(metric.Name) && CsvTelemetryService.IsPowerMetric(metric.Name), RankGpuPowerMetric);
             Add(T("gpu_temp_now"), "\uE9CA", metric => IsGpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name), RankGpuTemperatureMetric);
             Add("Hotspot", "\uE9CA", metric => IsGpuMetric(metric.Name) && IsGpuHotspotMetric(metric.Name), RankGpuTemperatureMetric);
-            Add(T("vram_usage"), "\uE8A7", IsVramMetric, RankVramMetric);
+            Add(T("vram_dedicated_used"), "\uE8A7", IsVramMetric, RankVramMetric);
             Add(T("gpu_usage"), "\uE7F4", metric => IsGpuCoreLoadMetric(metric.Name), _ => 0);
             Add(T("memory_clock"), "\uE8A7", metric => IsGpuMemoryClockMetric(metric.Name), _ => 0);
         }
@@ -833,7 +833,7 @@ public sealed partial class MainWindow : Window
     private string ShortMetricLabel(string metricName)
     {
         if (CsvTelemetryService.IsFpsMetric(metricName)) return "FPS";
-        if (IsVramMetric(new MetricSummary(metricName, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return T("vram_usage");
+        if (IsVramMetric(new MetricSummary(metricName, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return T("vram_dedicated_used");
         if (IsGpuMetric(metricName) && CsvTelemetryService.IsPowerMetric(metricName)) return T("gpu_power_now");
         if (IsCpuMetric(metricName) && CsvTelemetryService.IsPowerMetric(metricName)) return T("cpu_power_now");
         if (IsGpuMetric(metricName) && CsvTelemetryService.IsTemperatureMetric(metricName)) return T("gpu_temp_now");
@@ -908,7 +908,7 @@ public sealed partial class MainWindow : Window
         AddCard(cards, T("cpu_temp_now"), "\uE9CA", metric => IsCpuMetric(metric.Name) && CsvTelemetryService.IsTemperatureMetric(metric.Name), RankHighlightMetric);
         AddCard(cards, T("gpu_usage"), "\uE7F4", IsGpuLoadMetric, RankGamingMetric);
         AddCard(cards, T("cpu_usage"), "\uE950", IsCpuLoadMetric, RankGamingMetric);
-        AddCard(cards, T("vram_usage"), "\uE8A7", IsVramMetric, RankVramMetric);
+        AddCard(cards, T("vram_dedicated_used"), "\uE8A7", IsVramMetric, RankVramMetric);
         AddCard(cards, T("ram_usage"), "\uE8A7", IsRamMetric, RankGamingMetric);
         AddCard(cards, T("memory_temp"), "\uE9CA", IsMemoryTemperatureMetric, RankGamingMetric);
         return cards;
@@ -2072,6 +2072,7 @@ public sealed partial class MainWindow : Window
             "gpu_usage" => "GPU usage",
             "cpu_usage" => "CPU usage",
             "vram_usage" => "VRAM",
+            "vram_dedicated_used" => "VRAM dedicada usada",
             "ram_usage" => "RAM",
             "memory_temp" => "Memory temp",
             "power_subtitle" => "Prioritized energy and power sensors.",
@@ -2215,6 +2216,7 @@ public sealed partial class MainWindow : Window
             "gpu_usage" => "Uso GPU",
             "cpu_usage" => "Uso CPU",
             "vram_usage" => "VRAM",
+            "vram_dedicated_used" => "Dedicated VRAM used",
             "ram_usage" => "RAM",
             "memory_temp" => "Temp. memórias",
             "power_subtitle" => "Sensores de energia e consumo priorizados.",

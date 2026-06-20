@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Gabriel Ferreira
 using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Text;
 
 namespace TelemetryLab.WinUI.Telemetry;
@@ -237,9 +238,46 @@ public sealed class CsvTelemetryService
         }
 
         var path = new FileInfo(source);
-        var parent = path.Directory?.Name ?? string.Empty;
-        var stem = Path.GetFileNameWithoutExtension(source);
-        return string.IsNullOrWhiteSpace(parent) ? RepairMojibake(stem) : $"{RepairMojibake(parent)} / {RepairMojibake(stem)}";
+        var parts = path.Directory?.FullName
+            .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .Select(RepairMojibake)
+            .ToList() ?? [];
+        var stem = RepairMojibake(Path.GetFileNameWithoutExtension(source));
+        var machine = parts.LastOrDefault(part => Regex.IsMatch(part, @"(?i)(g\d{1,2}|dell|alienware|legion|loq|nitro|predator|tuf|rog|omen|victus|thinkpad|ideapad|recovery kit)"));
+        var gameIndex = parts.FindLastIndex(part => Regex.IsMatch(part, @"(?i)^(jogos|games|game)$"));
+        var workload = gameIndex >= 0 && gameIndex + 1 < parts.Count ? parts[gameIndex + 1] : string.Empty;
+        var resolution = parts.LastOrDefault(part => Regex.IsMatch(part, @"(?i)^\d{3,4}p$"));
+        var mode = InferMode(stem);
+        var cap = InferFpsCap(stem);
+        var titleBits = new[]
+            {
+                machine,
+                workload,
+                resolution,
+                mode,
+                cap.HasValue ? $"{cap.Value} FPS cap" : string.Empty
+            }
+            .Where(bit => !string.IsNullOrWhiteSpace(bit))
+            .Distinct(StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        return titleBits.Count > 0 ? string.Join(" / ", titleBits) : stem;
+    }
+
+    private static string InferMode(string stem)
+    {
+        var low = Fold(stem);
+        if (Regex.IsMatch(low, @"(^|-)(gmode)(-|$)")) return "G-Mode";
+        if (Regex.IsMatch(low, @"(^|-)(balanced|balanceado)(-|$)")) return "Balanced";
+        if (Regex.IsMatch(low, @"(^|-)(performance|turbo)(-|$)")) return "Performance";
+        if (Regex.IsMatch(low, @"(^|-)(silent|quiet|eco)(-|$)")) return "Eco";
+        return string.Empty;
+    }
+
+    private static int? InferFpsCap(string stem)
+    {
+        var match = Regex.Match(Fold(stem), @"(^|-)(\d{2,4})(?:fps)?cap($|-)");
+        return match.Success && int.TryParse(match.Groups[2].Value, out var cap) ? cap : null;
     }
 
     private static string RepairMojibake(string value)
