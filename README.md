@@ -122,13 +122,17 @@ No volume is required for normal use.
 
 Telemetry Lab also has a terminal interface for quick summaries when you do not need the full dashboard.
 
-The CLI uses the same CSV parser, context inference, canonical power/temperature/FPS metrics, and sensor filters as the app, but prints a compact table or JSON.
+The CLI uses the same CSV parser, context inference, canonical power/temperature/FPS metrics, and sensor filters as the app, but prints a compact table or JSON. Component groups are available with `--group cpu`, `--group gpu`, `--group memory`, and `--group storage`.
 
 Local usage from the repository:
 
 ```bash
 PYTHONPATH=src python -m telemetry_lab.cli "/path/to/report.CSV"
 PYTHONPATH=src python -m telemetry_lab.cli "/path/to/report.CSV" --group gaming
+PYTHONPATH=src python -m telemetry_lab.cli "/path/to/report.CSV" --group cpu
+PYTHONPATH=src python -m telemetry_lab.cli "/path/to/report.CSV" --group gpu
+PYTHONPATH=src python -m telemetry_lab.cli "/path/to/report.CSV" --group memory
+PYTHONPATH=src python -m telemetry_lab.cli "/path/to/report.CSV" --group storage
 PYTHONPATH=src python -m telemetry_lab.cli "/path/to/report.CSV" --group temperature --temperature F
 PYTHONPATH=src python -m telemetry_lab.cli "/path/to/report.CSV" --format json
 ```

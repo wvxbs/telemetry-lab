@@ -10,6 +10,7 @@ import pandas as pd
 
 from telemetry_lab.csv_io import parse_hwinfo_csv_bytes
 from telemetry_lab.metrics import (
+    component_metrics,
     curated_gaming_metrics,
     curated_power_metrics,
     curated_temperature_metrics,
@@ -23,7 +24,9 @@ from telemetry_lab.metrics import (
     is_vram_metric,
     metric_group,
     metric_unit,
+    rank_cpu_metric,
     rank_gpu_power_metric,
+    rank_gpu_temperature_metric,
     rank_vram_metric,
 )
 from telemetry_lab.report_service import build_report, report_for_temperature_unit
@@ -88,6 +91,8 @@ def _selected_columns(columns: list[str], group: str) -> list[str]:
         return curated_temperature_metrics(columns, include_extra=True)
     if group == "fps":
         return fps_metrics(columns)
+    if group in {"cpu", "gpu", "memory", "storage"}:
+        return component_metrics(columns, group, include_extra=False)
     if group == "gaming":
         return curated_gaming_metrics(columns, include_extra=False)
     if group == "all":
@@ -95,8 +100,8 @@ def _selected_columns(columns: list[str], group: str) -> list[str]:
 
     picked: list[str] = []
     picked.extend(_compact_power_metrics(columns))
-    picked.extend(_best(columns, lambda col: is_cpu_metric(col) and is_temperature_metric(col)))
-    picked.extend(_best(columns, lambda col: is_gpu_metric(col) and is_temperature_metric(col)))
+    picked.extend(_best(columns, lambda col: is_cpu_metric(col) and is_temperature_metric(col), rank_cpu_metric))
+    picked.extend(_best(columns, lambda col: is_gpu_metric(col) and is_temperature_metric(col), rank_gpu_temperature_metric))
     picked.extend(_best(columns, is_fps_metric))
     picked.extend(_best(columns, is_vram_metric, rank_vram_metric))
     return _dedupe(picked)

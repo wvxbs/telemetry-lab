@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("csv", help="Path to a HWiNFO CSV file readable by this process.")
     parser.add_argument(
         "--group",
-        choices=["summary", "gaming", "power", "temperature", "fps", "all"],
+        choices=["summary", "gaming", "cpu", "gpu", "memory", "storage", "power", "temperature", "fps", "all"],
         default="summary",
         help="Metric group to print. Default: summary.",
     )
