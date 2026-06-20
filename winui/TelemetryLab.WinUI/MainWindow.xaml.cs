@@ -1369,7 +1369,7 @@ public sealed partial class MainWindow : Window
             return false;
         }
 
-        if (low.Contains("clock") || low.Contains("relogio") || low.Contains("frequencia") || low.Contains("mhz") || low.Contains("ghz"))
+        if (low.Contains("clock") || low.Contains("relogio") || low.Contains("frequencia") || low.Contains("mhz") || low.Contains("ghz") || low.Contains("controlador") || low.Contains("controller"))
         {
             return false;
         }
@@ -1478,8 +1478,8 @@ public sealed partial class MainWindow : Window
         var low = CsvTelemetryService.Fold(name);
         if (CsvTelemetryService.IsPowerMetric(name)) return RankGpuPowerMetric(name);
         if (CsvTelemetryService.IsTemperatureMetric(name)) return 10 + RankGpuTemperatureMetric(name);
-        if (IsGpuLoadMetric(new MetricSummary(name, "Carga", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return 20;
-        if (IsVramMetric(new MetricSummary(name, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return 30 + RankVramMetric(name);
+        if (IsVramMetric(new MetricSummary(name, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return 20 + RankVramMetric(name);
+        if (IsGpuLoadMetric(new MetricSummary(name, "Carga", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))) return 30;
         if (low.Contains("clock") || low.Contains("relogio") || low.Contains("mhz")) return 40;
         if (low.Contains("[v]") || low.Contains("voltage") || low.Contains("tensao")) return 50;
         if (low.Contains("busy") || low.Contains("ms")) return 60;
