@@ -594,7 +594,9 @@ def curated_temperature_metrics(columns: list[str], include_extra: bool = False)
 
 def is_cpu_detail_metric(name: str) -> bool:
     low = ascii_fold(name)
-    cpu_voltage = ("vid" in low or "[v]" in low or "voltage" in low or "tensao" in low) and not is_gpu_metric(name)
+    cpu_voltage = ("vid" in low or "[v]" in low or "voltage" in low or "tensao" in low) and (
+        "cpu" in low or "core" in low or "ia" in low or "sa " in low or "uncore" in low
+    ) and not is_gpu_metric(name) and not any(term in low for term in ("pmic", "vout", "vin", "vddq", "vpp", "swa", "swb", "swc"))
     return is_cpu_metric(name) or "ia cores" in low or "gt cores" in low or "tjmax" in low or cpu_voltage
 
 
@@ -667,6 +669,22 @@ def rank_storage_metric(name: str) -> int:
     return 40
 
 
+def drop_redundant_cpu_core_clocks(columns: list[str]) -> list[str]:
+    has_cluster_avg = any(
+        any(term in ascii_fold(col) for term in ("p-core clock avg", "e-core clock avg", "relogios nucleo (avg)", "core clocks avg"))
+        for col in columns
+    )
+    if not has_cluster_avg:
+        return columns
+    def is_individual_clock(col: str) -> bool:
+        low = ascii_fold(col)
+        if "avg" in low or "medio" in low or "médio" in low:
+            return False
+        return ("p-core" in low or "e-core" in low or "lp-core" in low or re.search(r"\bcore\s*\d+", low)) and ("mhz" in low and ("relogio" in low or "clock" in low))
+
+    return [col for col in columns if not is_individual_clock(col)]
+
+
 def component_metrics(columns: list[str], component: str, include_extra: bool = True) -> list[str]:
     component = component.casefold()
     if component == "cpu":
@@ -681,6 +699,8 @@ def component_metrics(columns: list[str], component: str, include_extra: bool = 
         return []
     ranked = sorted([col for col in columns if predicate(col)], key=lambda col: (ranker(col), ascii_fold(col)))
     ranked = drop_redundant_canonical(ranked)
+    if component == "cpu":
+        ranked = drop_redundant_cpu_core_clocks(ranked)
     return ranked if include_extra else ranked[:24]
 
 

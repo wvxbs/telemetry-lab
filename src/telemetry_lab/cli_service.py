@@ -11,9 +11,11 @@ import pandas as pd
 from telemetry_lab.csv_io import parse_hwinfo_csv_bytes
 from telemetry_lab.metrics import (
     component_metrics,
+    cpu_cluster_frame,
     curated_gaming_metrics,
     curated_power_metrics,
     curated_temperature_metrics,
+    display_metric_value,
     estimated_system_power,
     fps_metrics,
     is_cpu_metric,
@@ -134,7 +136,7 @@ def _dedupe(values: Iterable[str]) -> list[str]:
 
 
 def _metric_row(numeric: pd.DataFrame, metric: str, live: bool, temperature_unit: str) -> CliMetric:
-    clean = numeric[metric].dropna()
+    clean = numeric[metric].dropna().map(lambda value: display_metric_value(metric, value, temperature_unit))
     average = float(clean.mean())
     minimum = float(clean.min())
     maximum = float(clean.max())
