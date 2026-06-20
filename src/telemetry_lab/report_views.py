@@ -10,6 +10,7 @@ from telemetry_lab.analysis import stats_frame
 from telemetry_lab.metrics import (
     battery_metrics,
     component_metrics,
+    cpu_cluster_frame,
     curated_gaming_metrics,
     curated_power_metrics,
     curated_temperature_metrics,
@@ -18,9 +19,12 @@ from telemetry_lab.metrics import (
     glossary_frame,
     is_cpu_load_metric,
     is_cpu_metric,
+    display_metric_value,
+    memory_technology,
     metric_group,
     metric_label,
     metric_unit,
+    storage_device_label,
     redundancy_frame,
     is_fps_metric,
     is_gpu_load_metric,
@@ -52,6 +56,8 @@ def long_metric_frame(reports: list[Report], metrics_by_report: dict[str, list[s
         if not metrics:
             continue
         data = report.numeric[metrics].copy()
+        for metric in metrics:
+            data[metric] = data[metric].map(lambda value, metric=metric: display_metric_value(metric, value))
         data.insert(0, "time", report.time.values)
         data.insert(1, "Report", label)
         frames.append(data.melt(id_vars=["time", "Report"], var_name="Metric", value_name="Value").dropna())
@@ -67,7 +73,7 @@ def metric_summary(reports: list[Report], metrics_by_report: dict[str, list[str]
         for metric in metrics_by_report.get(report.source, []):
             if metric not in report.numeric.columns:
                 continue
-            clean = report.numeric[metric].dropna()
+            clean = report.numeric[metric].dropna().map(lambda value, metric=metric: display_metric_value(metric, value))
             if clean.empty:
                 continue
             rows.append(
@@ -306,7 +312,19 @@ def render_component_view(reports: list[Report], component: str, title: str) -> 
     metrics_by_report = {
         report.source: component_metrics(list(report.numeric.columns), component, include_extra=include_extra) for report in reports
     }
-    st.caption("Sensores priorizados para leitura rapida aparecem primeiro; a tabela preserva os demais dados relevantes do HWiNFO.")
+    if component == "cpu":
+        for report in reports:
+            clusters = cpu_cluster_frame(report.numeric)
+            if not clusters.empty:
+                st.markdown("#### Clusters de CPU")
+                st.dataframe(clusters, width="stretch", hide_index=True)
+    elif component == "memory":
+        st.caption(f"Tecnologia inferida: {memory_technology(list(reports[0].numeric.columns))}. Clocks de memória são exibidos como MT/s efetivos.")
+    elif component == "storage":
+        devices = sorted({storage_device_label(metric) for report in reports for metric in component_metrics(list(report.numeric.columns), component, include_extra=True)})
+        st.caption(f"Dispositivos/grupos detectados: {', '.join(devices) if devices else '-'}")
+    else:
+        st.caption("Sensores priorizados para leitura rapida aparecem primeiro; a tabela preserva os demais dados relevantes do HWiNFO.")
     for idx, report in enumerate(reports, start=1):
         label = report_label(report, f"R{idx}")
         metrics = metrics_by_report.get(report.source, [])

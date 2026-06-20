@@ -74,8 +74,8 @@ def path_reload_controls(prefix: str) -> tuple[bool, int]:
     if st.button(tr("reload_now"), key=f"{prefix}_reload_now"):
         st.session_state[token_key] += 1
     if live:
-        refresh = st.number_input(tr("refresh_seconds"), min_value=2, max_value=120, value=10, key=f"{prefix}_refresh")
-        components.html(f"<meta http-equiv='refresh' content='{int(refresh)}'>", height=0)
+        refresh = st.number_input(tr("refresh_seconds"), min_value=0.25, max_value=30.0, value=0.5, step=0.25, key=f"{prefix}_refresh")
+        components.html(f"<meta http-equiv='refresh' content='{float(refresh)}'>", height=0)
     return live, int(st.session_state[token_key])
 
 

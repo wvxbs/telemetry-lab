@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 import pandas as pd
 
@@ -193,6 +194,86 @@ def describe_metric(name: str) -> MetricInfo:
     return MetricInfo(name=name, category=group, description=desc, aliases=aliases)
 
 
+def is_memory_clock_metric(name: str) -> bool:
+    low = ascii_fold(name)
+    return "gpu" not in low and ("relogio da memoria" in low or "memory clock" in low) and "mhz" in low
+
+
+def display_metric_value(name: str, value: float, temperature_unit: str = "C") -> float:
+    if temperature_unit == "F" and is_temperature_metric(name):
+        return value * 9 / 5 + 32
+    if is_memory_clock_metric(name):
+        return value * 2
+    return value
+
+
+def memory_technology(columns: list[str]) -> str:
+    text = " ".join(ascii_fold(col) for col in columns)
+    if "ddr5" in text or "spd hub" in text or "pmic" in text or "vddq" in text:
+        return "DDR5"
+    if "ddr4" in text:
+        return "DDR4"
+    if "ddr3" in text:
+        return "DDR3"
+    if "gear mode" in text:
+        return "DDR4/DDR5"
+    return "DDR"
+
+
+def storage_device_label(name: str) -> str:
+    low = ascii_fold(name)
+    match = re.search(r"(?:disco|disk|drive|ssd|nvme)\s*(\d+)", low)
+    if match and int(match.group(1)) > 0:
+        return f"Disco/SSD {int(match.group(1))}"
+    suffix = re.search(r"#(\d+)$", low)
+    if suffix and int(suffix.group(1)) > 1:
+        return f"Disco/SSD {int(suffix.group(1))}"
+    return "Disco/SSD 1"
+
+
+def is_cpu_core_clock(name: str) -> bool:
+    low = ascii_fold(name)
+    if "mhz" not in low or not ("relogio" in low or "clock" in low):
+        return False
+    if any(term in low for term in ("efetivo", "effective", "avg", "barramento", "bus", "ring", "llc", "gpu", "memoria", "memory")):
+        return False
+    return any(term in low for term in ("p-core", "e-core", "lp-core", "core ")) or re.search(r"\bcore\s*\d+", low) is not None
+
+
+def cpu_cluster_name(name: str) -> str:
+    low = ascii_fold(name)
+    if "lp-core" in low or "lp e-core" in low:
+        return "LP-core"
+    if "p-core" in low:
+        return "P-core"
+    if "e-core" in low:
+        return "E-core"
+    if "zen 5c" in low:
+        return "Zen 5c"
+    if "zen 5" in low:
+        return "Zen 5"
+    return "Core"
+
+
+def cpu_cluster_frame(numeric: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for cluster, cols in sorted(
+        ((cluster, [col for col in numeric.columns if is_cpu_core_clock(col) and cpu_cluster_name(col) == cluster]) for cluster in {cpu_cluster_name(col) for col in numeric.columns if is_cpu_core_clock(col)}),
+        key=lambda item: {"P-core": 0, "Core": 1, "E-core": 2, "LP-core": 3, "Zen 5": 4, "Zen 5c": 5}.get(item[0], 10),
+    ):
+        data = numeric[cols].dropna(how="all")
+        if data.empty:
+            continue
+        rows.append({
+            "Cluster": cluster,
+            "Avg MHz": data.mean(axis=1).mean(),
+            "Max MHz": data.max(axis=1).max(),
+            "Last MHz": data.tail(1).mean(axis=1).iloc[0],
+            "Cores": len(cols),
+        })
+    return pd.DataFrame(rows)
+
+
 def metric_unit(name: str, temperature_unit: str = "C") -> str:
     low = ascii_fold(name)
     if is_temperature_metric(name):
@@ -203,6 +284,8 @@ def metric_unit(name: str, temperature_unit: str = "C") -> str:
         return "W"
     if "%" in name or any(term in low for term in ("load", "carga", "uso", "utilization")):
         return "%"
+    if is_memory_clock_metric(name):
+        return "MT/s"
     if "mhz" in low:
         return "MHz"
     if "ghz" in low:
@@ -279,9 +362,9 @@ def rank_gpu_power_metric(name: str) -> int:
     if "total board power" in low or "tbp" in low or "tgp" in low:
         return 1
     if "8-pin" in low or "entrada de energia gpu" in low:
-        return 4
+        return 24
     if "linhas gpu" in low:
-        return 5
+        return 25
     if "fonte pp" in low:
         return 20
     if "nvvdd" in low or "restante do chip" in low or "system agent" in low:
@@ -561,7 +644,7 @@ def rank_memory_metric(name: str) -> int:
     if "spd hub" in low and is_temperature_metric(name):
         return 2
     if "relogio da memoria" in low or "memory clock" in low:
-        return 3
+        return 0
     if "memoria virtual" in low:
         return 10
     return 40
